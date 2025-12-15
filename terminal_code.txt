@@ -1,8 +1,0 @@
-1. python3 -m venv venv 
-2. source venv/bin/activate
-3. pip install youtube-transcript-api langchain-community langchain-huggingface langchain-experimental chromadb sentence-transformers
-4. /Applications/Python\ 3.12/Install\ Certificates.command
-5. export HF_TOKEN="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"
-6. export TOKENIZERS_PARALLELISM=false
-7. python3 main.py
-(입력은: EMfQuZkzmuc)
