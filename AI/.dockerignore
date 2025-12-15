@@ -1,0 +1,10 @@
+AI/__pycache__
+AI/venv
+AI/.env
+AI/local_model
+AI/chroma_db
+AI/*.pyc
+backend/
+frontend/
+.git
+.DS_Store
