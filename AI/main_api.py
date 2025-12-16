@@ -1,11 +1,3 @@
-import __main__
-try:
-    __import__('pysqlite3')
-    import sys
-    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-except ImportError:
-    pass
-import os
 import uvicorn
 import re
 from fastapi import FastAPI, HTTPException
@@ -24,7 +16,7 @@ app = FastAPI(
     description="졸업 프로젝트: 사용자 매매 기록과 유튜브 영상을 결합한 투자 조언 생성"
 )
 
-# CORS 설정 (프론트엔드 연동 시 필요)
+# CORS 설정
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -38,7 +30,7 @@ app.add_middleware(
 class TradeItem(BaseModel):
     stockName: str
     stockCode: str
-    tradeType: str  # "buy" or "sell"
+    tradeType: str
     date: str
     price: float
     quantity: int
@@ -66,10 +58,7 @@ def health_check():
 
 @app.post("/api/test-video")
 async def test_video_id(url: str):
-    """
-    유튜브 URL 테스트용 엔드포인트
-    자막 추출만 테스트합니다.
-    """
+    """유튜브 URL 테스트용 엔드포인트"""
     try:
         video_id = extract_video_id(url)
         if not video_id:
@@ -77,7 +66,6 @@ async def test_video_id(url: str):
         
         print(f"[Test] Video ID: {video_id}")
         
-        # 자막 추출 시도
         transcript_text = transcript(video_id)
         
         if not transcript_text:
@@ -115,7 +103,6 @@ async def analyze_video(request: AnalysisRequest):
             
             print(f"[API Log] 요청 URL: {request.externalUrl}")
             
-            # URL에서 ID 추출
             video_id = extract_video_id(request.externalUrl)
             if not video_id:
                 raise HTTPException(
@@ -125,11 +112,9 @@ async def analyze_video(request: AnalysisRequest):
                 
             print(f"[API Log] 추출된 Video ID: {video_id}")
 
-            # 2. 자막 추출 (재시도 로직 포함)
             transcript_text = transcript(video_id)
             
             if not transcript_text:
-                # 더 자세한 에러 메시지 반환
                 error_detail = {
                     "message": "자막을 가져올 수 없습니다.",
                     "video_id": video_id,
@@ -146,16 +131,23 @@ async def analyze_video(request: AnalysisRequest):
             
             print(f"[API Log] 자막 추출 성공! 길이: {len(transcript_text)}자")
                 
-            # 3. RAG: DB 생성 및 전략 검색
-            print("[API Log] ChromaDB 생성 시작...")
-            # reset_db() 
-            create_vector_db(transcript_text)
+            # RAG: DB 생성 및 전략 검색
+            print("[API Log] ChromaDB 생성 시작 (EphemeralClient)...")
             
-            # 전략 관련 키워드로 검색
+            try:
+                create_vector_db(transcript_text)
+                print("[API Log] ChromaDB 생성 성공!")
+            except Exception as db_error:
+                print(f"[Error] ChromaDB 생성 실패: {db_error}")
+                print(traceback.format_exc())
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"데이터베이스 생성 실패: {str(db_error)}"
+                )
+            
             query = "이 동영상에서 주장하는 핵심 매매 기법과 투자 원칙, 매수 타점은?"
             retrieval_result = search_strategy(query, k=5)
             
-            # 검색된 텍스트 결합
             video_context = "\n\n".join([doc.page_content for doc in retrieval_result])
             print(f"[API Log] RAG 검색 완료! Context 길이: {len(video_context)}자")
             
@@ -163,7 +155,7 @@ async def analyze_video(request: AnalysisRequest):
             video_context = "일반적인 기술적 분석 관점에서 조언합니다."
             print("[API Log] 기본 전략 모드로 진행합니다.")
 
-        # 4. LLM 답변 생성
+        # LLM 답변 생성
         print("[API Log] LLM 답변 생성 시작...")
         final_answer = generate_answer(video_context, request)
         
@@ -171,11 +163,9 @@ async def analyze_video(request: AnalysisRequest):
         return final_answer
     
     except HTTPException as he:
-        # HTTPException은 그대로 전달
         raise he
         
     except Exception as e:
-        # 예상치 못한 에러는 로그 출력 후 500 에러로 반환
         print(f"[Error] 예상치 못한 오류 발생: {e}")
         print(traceback.format_exc())
         raise HTTPException(

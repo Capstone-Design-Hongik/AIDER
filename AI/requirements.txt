@@ -11,4 +11,4 @@ huggingface_hub
 certifi
 chromadb
 tiktoken
-pysqlite3-binary
+# pysqlite3-binary
