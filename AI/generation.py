@@ -4,6 +4,9 @@ import json
 from openai import OpenAI
 from typing import List, Any
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # 환경 변수 체크
 if "HF_TOKEN" not in os.environ:

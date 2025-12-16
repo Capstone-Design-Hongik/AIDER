@@ -4,16 +4,14 @@ from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# DB가 저장될 로컬 경로
-PERSIST_DIRECTORY = "./chroma_db"
+# 전역 변수로 vectorstore 저장 (메모리 기반)
+_vectorstore = None
 
 def get_embeddings():
-    # 임베딩 모델 설정을 한 곳에서 관리
     model_name = "jhgan/ko-sroberta-multitask"
     model_kwargs = {'device': 'cpu'} 
     encode_kwargs = {'normalize_embeddings': True}
     
-    # 디버깅용 로그 추가
     print(f"[Debug] 임베딩 모델 로드 경로: {model_name}")
     
     return HuggingFaceEmbeddings(
@@ -23,7 +21,8 @@ def get_embeddings():
     )
 
 def create_vector_db(full_text):
-    # 텍스트를 청킹하여 ChromaDB에 저장
+    global _vectorstore
+    
     print("\n[Chunking] Recursive Character Text Splitter !")
 
     embeddings = get_embeddings()
@@ -34,7 +33,7 @@ def create_vector_db(full_text):
     text_splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
-        separators=["\n\n", "\n", " ", ""], # 분할 기준으로 사용할 문자 목록
+        separators=["\n\n", "\n", " ", ""],
         length_function=len
     )
 
@@ -50,33 +49,26 @@ def create_vector_db(full_text):
     print(f"  - (Chunk Size: {CHUNK_SIZE}, Overlap: {CHUNK_OVERLAP})")
     print(f"  - 생성된 청크(Chunk) 개수: {len(docs)}개")
     
-    # ChromaDB 생성 및 저장
-    vectorstore = Chroma.from_documents(
+    # 메모리 기반 ChromaDB 생성 (persist_directory 제거)
+    _vectorstore = Chroma.from_documents(
         documents=docs,
         embedding=embeddings,
-        persist_directory=PERSIST_DIRECTORY,
-        collection_name="investment_strategies" # 컬렉션 이름 지정
-    )
-    
-    print(f"[ChromaDB 저장] 데이터가 '{PERSIST_DIRECTORY}' 폴더에 저장 !")
-    return vectorstore
-
-def search_strategy(query, k=3):
-    # 저장된 ChromaDB에서 질문과 유사한 내용을 검색
-    print(f"\n[Search] 검색 질의: '{query}'")
-    
-    # 1. 임베딩 모델 다시 로드 (저장할 때와 동일해야 함)
-    embeddings = get_embeddings()
-    
-    # 2. 디스크에 저장된 DB 불러오기
-    vectorstore = Chroma(
-        persist_directory=PERSIST_DIRECTORY,
-        embedding_function=embeddings,
         collection_name="investment_strategies"
     )
     
-    # 3. 유사도 검색
-    results = vectorstore.similarity_search(query, k=k)
+    print(f"[ChromaDB 저장] 메모리에 데이터 저장 완료!")
+    return _vectorstore
+
+def search_strategy(query, k=3):
+    global _vectorstore
+    
+    print(f"\n[Search] 검색 질의: '{query}'")
+    
+    if _vectorstore is None:
+        raise ValueError("[Error] VectorStore가 초기화되지 않았습니다. create_vector_db()를 먼저 호출하세요.")
+    
+    # 메모리에서 직접 검색
+    results = _vectorstore.similarity_search(query, k=k)
     
     print(f"[Search] 검색 결과({len(results)}건):")
     for i, res in enumerate(results):
@@ -86,7 +78,6 @@ def search_strategy(query, k=3):
     return results
 
 def reset_db():
-    # DB 초기화시 사용
-    if os.path.exists(PERSIST_DIRECTORY):
-        shutil.rmtree(PERSIST_DIRECTORY)
-        print("[Info] 기존 DB 삭제 완료")
+    global _vectorstore
+    _vectorstore = None
+    print("[Info] 메모리 DB 초기화 완료")

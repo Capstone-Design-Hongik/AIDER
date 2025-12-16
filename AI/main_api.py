@@ -1,4 +1,10 @@
-# main_api.py
+import __main__
+try:
+    __import__('pysqlite3')
+    import sys
+    sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+except ImportError:
+    pass
 import os
 import uvicorn
 import re
@@ -142,7 +148,7 @@ async def analyze_video(request: AnalysisRequest):
                 
             # 3. RAG: DB 생성 및 전략 검색
             print("[API Log] ChromaDB 생성 시작...")
-            reset_db() 
+            # reset_db() 
             create_vector_db(transcript_text)
             
             # 전략 관련 키워드로 검색
