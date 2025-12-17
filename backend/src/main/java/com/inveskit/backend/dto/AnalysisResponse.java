@@ -1,24 +1,24 @@
 package com.inveskit.backend.dto;
 
 import lombok.*;
+import java.util.List;
 
 @Getter
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class AnalysisResponse {
-    private String strategy;
-    private String summary;
-    private String advice;
-    private Metrics metrics;
+    private List<TradeAnalysis> analysis;
+    private Integer totalScore;
 
     @Getter
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class Metrics {
-        private Integer totalTrades;
-        private Double avgPrice;
-        private Integer totalVolume;
+    public static class TradeAnalysis {
+        private Integer tradeId;
+        private String stockName;
+        private String type;
+        private String advice;
     }
 }
