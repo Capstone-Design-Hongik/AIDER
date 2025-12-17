@@ -1,6 +1,7 @@
 # generation.py
 import os
 import json
+import re  # 정규표현식 모듈 추가
 from openai import OpenAI
 from typing import List, Any
 from datetime import datetime, timedelta
@@ -19,7 +20,8 @@ client = OpenAI(
     timeout=90.0
 )
 
-MODEL_NAME = "openai/gpt-oss-20b:groq"
+# 모델명은 유지하거나, 필요시 더 안정적인 모델로 변경 가능
+MODEL_NAME = "openai/gpt-oss-20b:groq" 
 
 def get_price_context(trade_date_str: str, stock_prices: List[Any]) -> str:
     """
@@ -30,8 +32,9 @@ def get_price_context(trade_date_str: str, stock_prices: List[Any]) -> str:
         
         relevant_prices = []
         for p in stock_prices:
-            p_date_str = p.date if hasattr(p, 'date') else p['date']
-            p_price = p.closePrice if hasattr(p, 'closePrice') else p['closePrice']
+            # Pydantic 모델과 Dict 양쪽 대응
+            p_date_str = p.date if hasattr(p, 'date') else p.get('date')
+            p_price = p.closePrice if hasattr(p, 'closePrice') else p.get('closePrice')
             
             p_date = datetime.strptime(p_date_str, "%Y-%m-%d")
             
@@ -47,6 +50,30 @@ def get_price_context(trade_date_str: str, stock_prices: List[Any]) -> str:
     except Exception as e:
         print(f"[Error] 날짜 처리 중 오류: {e}")
         return "  (날짜 형식 오류로 데이터 추출 실패)"
+
+def clean_json_text(text: str) -> str:
+    """
+    LLM이 마크다운 코드 블록(```json ... ```)이나 잡다한 텍스트를 포함했을 때
+    순수 JSON 부분만 추출하는 함수
+    """
+    try:
+        # 1. 마크다운 코드 블록 제거
+        text = re.sub(r"```json\s*", "", text)
+        text = re.sub(r"```\s*$", "", text)
+        
+        # 2. 앞뒤 공백 제거
+        text = text.strip()
+        
+        # 3. 중괄호 {} 로 시작하고 끝나는지 확인하여 그 부분만 추출
+        start_idx = text.find('{')
+        end_idx = text.rfind('}')
+        
+        if start_idx != -1 and end_idx != -1:
+            return text[start_idx : end_idx + 1]
+        
+        return text
+    except Exception:
+        return text
 
 def make_rag_prompt(video_context: str, user_data: Any) -> str:
     print("\n[Generation] 종목별 매매 분석 프롬프트 구성 중...")
@@ -102,49 +129,27 @@ def make_rag_prompt(video_context: str, user_data: Any) -> str:
 **[사용자의 종목별 매매 기록]**
 {stocks_context}
 
-**[조언 작성 지침]**
-1. **종목별 통합 조언**: 각 종목의 모든 매매 내역을 종합하여 하나의 조언으로 작성
-2. **구체적이고 실천 가능**: "다음에는 이렇게 하세요" 형태로 명확한 액션 아이템 제시
-3. **영상 전략 반영**: 영상에서 강조한 매매 원칙(눌림목, 이동평균, 지지선 등)을 구체적으로 언급
-4. **긍정적 톤**: 잘한 점은 인정하고, 개선점은 건설적으로 제안
-5. **2-4문장 길이**: 너무 길지 않게, 핵심만 담아서 작성
+**[필수 요청 사항]**
+1. **반드시 JSON 형식만 출력하세요.**
+2. **마크다운(```json)이나 다른 설명 텍스트를 절대 포함하지 마세요.**
+3. 아래 포맷을 정확히 따르세요.
 
-**advice 작성 예시:**
-- "이동평균선(20일) 돌파를 확인한 후 거래량이 평소의 1.5배 이상 증가할 때 진입하세요. 현재 추격 매수 경향이 있으니, 조정 구간에서 지지선을 확인하는 습관을 들이면 더 안정적입니다."
-- "데이터가 부족하여 정확한 분석이 어렵습니다. 매매 전후 최소 10일치 주가 데이터를 확인하고, 지지/저항선을 파악한 후 진입하세요."
-- "상승 추세는 잘 포착했습니다. 다만 진입 시점을 전일 종가 대비 -2~3% 하락한 눌림목에서 잡으면 리스크를 줄일 수 있습니다."
-
-**total_score 작성 지침:**
-- "90-100점: 완벽한 전략 실행"
-- "75-89점: 대체로 우수"
-- "60-74점: 핵심은 이해했으나 개선 필요"
-- "40-59점: 전략과 괴리"
-- "0-39점: 무계획적 매매"
-
-**total_score 평가 요소**
-- 매수 타점의 적절성 (눌림목, 지지선)
-- 기술적 지표 활용 (이동평균 등)
-- 추세 파악 능력
-- 리스크 관리
-영상 전략 준수도
-
-**[출력 형식 (JSON)]**
+**[출력 JSON 포맷]**
 {{
     "analysis": [
         {{
             "trade_id": 1,
             "stock_name": "종목명",
-            "type": "해당 종목의 주요 매매 유형 (예: 매수 2회)",
-            "advice": "이 종목의 매매 내역을 종합 분석한 구체적인 조언. 잘한 점을 인정하고, 영상 전략을 바탕으로 개선점을 2-4문장으로 명확하게 제시."
+            "type": "매수 2회, 매도 1회 등 요약",
+            "advice": "영상 내용에 기반한 구체적인 조언 (2-4문장)"
         }}
     ],
     "total_score": 75
 }}
 
-**중요**: 
-- advice는 사용자가 바로 다음 투자에 적용할 수 있는 구체적인 조언이어야 합니다
-- 영상의 투자 원칙(이동평균, 눌림목, 지지선 등)을 반드시 언급하세요
-- 데이터가 부족한 경우에도 일반적인 조언을 제공하세요
+**advice 작성 팁:**
+- "이동평균선", "눌림목", "거래량" 등 영상의 핵심 키워드를 포함하세요.
+- 데이터가 부족하면 "데이터 부족으로 정확한 분석은 어렵지만~" 형태로 일반적인 조언을 주세요.
 """
     
     final_prompt = PROMPT_TEMPLATE.format(
@@ -159,21 +164,31 @@ def generate_answer(video_context: str, user_data: Any) -> dict:
     print(f"[Generation] LLM 호출 시작!")
 
     try:
+        # response_format 파라미터 제거하여 400 에러 방지
         completion = client.chat.completions.create(
             model=MODEL_NAME,
             messages=[{"role": "user", "content": rag_prompt}],
             temperature=0.1,
-            max_tokens=2048,
-            response_format={"type": "json_object"}
+            max_tokens=2048
         )
         
         if completion.choices:
-            content = completion.choices[0].message.content.strip()
+            raw_content = completion.choices[0].message.content.strip()
+            # print(f"[Debug] Raw LLM Response: {raw_content[:100]}...") # 디버깅용
+            
+            # JSON 클렌징 (마크다운 제거 등)
+            clean_content = clean_json_text(raw_content)
+            
             try:
-                return json.loads(content)
-            except:
-                # JSON 파싱 실패시 텍스트라도 반환
-                return {"error": "JSON 파싱 실패", "raw_text": content}
+                return json.loads(clean_content)
+            except json.JSONDecodeError as je:
+                print(f"[Error] JSON 파싱 실패: {je}")
+                # 파싱 실패 시, 원본 텍스트를 포함한 에러 객체 반환
+                return {
+                    "error": "JSON 파싱 실패", 
+                    "raw_text": raw_content,
+                    "advice": "AI가 답변을 생성했으나 형식이 올바르지 않습니다. 다시 시도해주세요."
+                }
         else:
             return {"error": "No response"}
 
