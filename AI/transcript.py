@@ -1,3 +1,4 @@
+import os
 import re
 from youtube_transcript_api import YouTubeTranscriptApi
 
@@ -20,6 +21,18 @@ def extract_video_id(url):
 
 def transcript(video_id):
     try:
+        print(f"[Transcript] 자막 추출 시도: {video_id}")
+        
+        # 1. cookies.txt 파일 경로 설정
+        # Railway 서버에 올렸을 때 같은 폴더에 있다고 가정
+        cookies_path = "cookies.txt"
+        
+        if not os.path.exists(cookies_path):
+            print("[Warning] 'cookies.txt' 파일이 없습니다! IP 차단될 확률이 높습니다.")
+            cookies_path = None # 파일 없으면 쿠키 없이 시도
+        else:
+            print("[Info] 'cookies.txt'를 발견하여 인증을 시도합니다.")
+        
         api = YouTubeTranscriptApi()
 
         transcript_list = api.list(video_id)
