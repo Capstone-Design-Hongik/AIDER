@@ -131,6 +131,8 @@ def make_rag_prompt(video_context: str, user_data: Any) -> str:
 - "상승 추세는 잘 포착했습니다. 다만 진입 시점을 전일 종가 대비 -2~3% 하락한 눌림목에서 잡으면 리스크를 줄일 수 있습니다."
 
 **[출력 형식 (JSON)]**
+반드시 아래 JSON 구조를 정확히 따르세요. total_score는 analysis 배열 밖에 위치해야 합니다.
+
 {{
     "analysis": [
         {{
@@ -138,10 +140,38 @@ def make_rag_prompt(video_context: str, user_data: Any) -> str:
             "stock_name": "종목명",
             "type": "해당 종목의 주요 매매 유형 (예: 매수 2회)",
             "advice": "이 종목의 매매 내역을 종합 분석한 구체적인 조언. 잘한 점을 인정하고, 영상 전략을 바탕으로 개선점을 2-4문장으로 명확하게 제시."
+        }},
+        {{
+            "trade_id": 2,
+            "stock_name": "다른 종목명",
+            "type": "매수 1회",
+            "advice": "..."
         }}
     ],
     "total_score": 75
 }}
+
+**JSON 형식 주의사항:**
+- analysis는 배열(array)입니다
+- total_score는 analysis 배열과 같은 레벨에 있어야 합니다 (배열 안에 들어가면 안 됨)
+- total_score의 값은 숫자(number)여야 합니다 (문자열 X)
+
+**올바른 예시:**
+{{
+    "analysis": [...],
+    "total_score": 65
+}}
+
+**잘못된 예시 (하지 마세요):**
+{{
+    "analysis": [...],
+    "total_score": "65"  ← 문자열 X
+}}
+또는
+[
+    {{"analysis": [...]}},
+    "total_score": 65  ← 배열 구조 X
+]
 
 **점수 예시:**
 - 95점: "영상의 눌림목 매수 전략을 완벽히 실행. 20일 이동평균 돌파 후 조정 시 진입"
