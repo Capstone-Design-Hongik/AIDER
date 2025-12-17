@@ -523,61 +523,136 @@ React.useEffect(() => {
 };
 
   const renderAnalysisPage = () => (
-    <div className="max-w-4xl mx-auto">
-      {analysis ? (
+  <div className="max-w-4xl mx-auto">
+    {analysis ? (
+      <div className="space-y-6">
+        {/* 총점 카드 */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-6">AI 분석 결과</h2>
-          
-          <div className="space-y-5">
-            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-              <div className="text-sm text-slate-600 mb-1">선택한 전략</div>
-              <div className="text-lg font-semibold text-slate-900">{analysis.strategy}</div>
-              {analysis.url && (
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900 mb-2">AI 분석 결과</h2>
+              <p className="text-sm text-gray-500">
+                선택한 전략: <span className="font-medium text-gray-700">
+                  {strategy === 'bollinger' ? '볼린저 밴드' : 
+                   strategy === 'trend' ? '추세추종' : '외부 전략'}
+                </span>
+              </p>
+              {strategy === 'external' && externalUrl && (
                 <a 
-                  href={analysis.url} 
+                  href={externalUrl} 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="text-sm text-slate-600 hover:text-slate-900 mt-1 block break-all"
+                  className="text-sm text-blue-600 hover:text-blue-800 mt-1 block break-all"
                 >
-                  🔗 {analysis.url}
+                  🔗 {externalUrl}
                 </a>
               )}
             </div>
-
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <div className="text-xs text-gray-500 mb-1">총 거래</div>
-                <div className="text-xl font-bold text-gray-900">{analysis.metrics.totalTrades}건</div>
-              </div>
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <div className="text-xs text-gray-500 mb-1">평균 단가</div>
-                <div className="text-xl font-bold text-gray-900">{parseFloat(analysis.metrics.avgPrice).toLocaleString()}원</div>
-              </div>
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <div className="text-xs text-gray-500 mb-1">총 수량</div>
-                <div className="text-xl font-bold text-gray-900">{analysis.metrics.totalVolume}주</div>
-              </div>
-            </div>
-
-            <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-              <div className="text-sm font-semibold text-blue-900 mb-2">💡 AI 조언</div>
-              <div className="text-sm text-blue-800 leading-relaxed">
-                {analysis.advice}
+            <div className="text-center">
+              <div className="text-sm text-gray-500 mb-1">종합 점수</div>
+              <div className={`text-4xl font-bold ${
+                analysis.totalScore >= 80 ? 'text-emerald-600' :
+                analysis.totalScore >= 60 ? 'text-blue-600' :
+                analysis.totalScore >= 40 ? 'text-yellow-600' :
+                'text-red-600'
+              }`}>
+                {analysis.totalScore}
+                <span className="text-2xl text-gray-400">/100</span>
               </div>
             </div>
           </div>
         </div>
-      ) : (
+
+        {/* 거래별 분석 */}
+        <div className="space-y-4">
+          {analysis.analysis && analysis.analysis.map((item, index) => (
+            <div key={index} className="bg-white rounded-lg border border-gray-200 p-6">
+              <div className="flex items-start gap-4">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white ${
+                  index === 0 ? 'bg-yellow-500' :
+                  index === 1 ? 'bg-gray-400' :
+                  index === 2 ? 'bg-orange-400' :
+                  'bg-slate-400'
+                }`}>
+                  {index + 1}
+                </div>
+                
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-3">
+                    <h3 className="text-lg font-semibold text-gray-900">{item.stockName}</h3>
+                    <span className="px-3 py-1 bg-slate-100 text-slate-700 text-sm rounded-full font-medium">
+                      {item.type}
+                    </span>
+                  </div>
+
+                  {/* AI 조언 */}
+                  <div className="bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+                    <div className="text-sm font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                      <span>💡</span>
+                      <span>AI 투자 조언</span>
+                    </div>
+                    <div className="text-sm text-blue-800 leading-relaxed whitespace-pre-wrap">
+                      {item.advice}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* 요약 통계 */}
         <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="text-center py-16 text-gray-400">
-            <AlertCircle className="w-16 h-16 mx-auto mb-4 opacity-50" />
-            <p className="text-base">분석 결과가 없습니다</p>
-            <p className="text-sm mt-2">거래 입력 페이지에서 AI 분석을 실행해주세요</p>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">분석 요약</h3>
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <div className="text-xs text-gray-500 mb-1">분석된 거래</div>
+              <div className="text-xl font-bold text-gray-900">
+                {analysis.analysis ? analysis.analysis.length : 0}건
+              </div>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <div className="text-xs text-gray-500 mb-1">종합 점수</div>
+              <div className="text-xl font-bold text-gray-900">{analysis.totalScore}점</div>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <div className="text-xs text-gray-500 mb-1">평가 등급</div>
+              <div className={`text-xl font-bold ${
+                analysis.totalScore >= 80 ? 'text-emerald-600' :
+                analysis.totalScore >= 60 ? 'text-blue-600' :
+                analysis.totalScore >= 40 ? 'text-yellow-600' :
+                'text-red-600'
+              }`}>
+                {analysis.totalScore >= 80 ? 'A' :
+                 analysis.totalScore >= 60 ? 'B' :
+                 analysis.totalScore >= 40 ? 'C' : 'D'}
+              </div>
+            </div>
           </div>
         </div>
-      )}
-    </div>
-  );
+
+        {/* 다음 단계 안내 */}
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+          <div className="text-sm font-medium text-amber-900 mb-2">📌 분석 결과 활용 팁</div>
+          <ul className="text-xs text-amber-800 space-y-1">
+            <li>• AI 조언을 참고하여 다음 투자 전략을 수립하세요</li>
+            <li>• 여러 전략(볼린저 밴드, 추세추종, 외부 전략)으로 비교 분석해보세요</li>
+            <li>• 정기적으로 거래 내역을 분석하여 투자 습관을 개선하세요</li>
+          </ul>
+        </div>
+      </div>
+    ) : (
+      <div className="bg-white rounded-lg border border-gray-200 p-6">
+        <div className="text-center py-16 text-gray-400">
+          <AlertCircle className="w-16 h-16 mx-auto mb-4 opacity-50" />
+          <p className="text-base">분석 결과가 없습니다</p>
+          <p className="text-sm mt-2">거래 입력 페이지에서 AI 분석을 실행해주세요</p>
+        </div>
+      </div>
+    )}
+  </div>
+);
+
 
   const renderMyPage = () => {
     const totalInvestment = trades.reduce((sum, t) => {
