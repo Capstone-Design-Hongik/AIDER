@@ -2,33 +2,20 @@ spring:
   application:
     name: inveskit-backend
 
-  # H2 Database 설정 (개발용)
-  datasource:
-    url: jdbc:h2:mem:inveskit
-    driver-class-name: org.h2.Driver
-    username: sa
-    password:
-
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-
   jpa:
     hibernate:
-      ddl-auto: create  # 테이블 자동 생성
-    show-sql: true      # SQL 쿼리 로그 출력
+      ddl-auto: update        # 기존 데이터 유지하며 스키마 변경만 반영
+    show-sql: true
     properties:
       hibernate:
-        format_sql: true  # SQL 예쁘게 출력
-        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
 logging:
   level:
     com.inveskit.backend: DEBUG
     org.hibernate.SQL: DEBUG
 
-# Y ahoo Finance 설정
 yahoo:
   finance:
     base-url: https://query1.finance.yahoo.com

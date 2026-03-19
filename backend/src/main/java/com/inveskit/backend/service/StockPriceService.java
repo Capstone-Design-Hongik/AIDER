@@ -2,6 +2,7 @@ package com.inveskit.backend.service;
 
 import com.inveskit.backend.client.StockPriceData;
 import com.inveskit.backend.client.YahooFinanceClient;
+import com.inveskit.backend.domain.StockInfo;
 import com.inveskit.backend.domain.StockPrice;
 import com.inveskit.backend.dto.StockPriceResponse;
 import com.inveskit.backend.repository.StockPriceRepository;
@@ -21,6 +22,7 @@ public class StockPriceService {
 
     private final StockPriceRepository stockPriceRepository;
     private final YahooFinanceClient yahooFinanceClient;
+    private final StockInfoService stockInfoService;
 
     // 특정 종목의 60일 주가 데이터 조회
     public StockPriceResponse getStockPrices(String stockName, LocalDate endDate) {
@@ -48,17 +50,22 @@ public class StockPriceService {
                 .build();
     }
 
-    //2025.01.01 부터 현재(2025.12.04)까지의 종가 데이터 DB에 저장하는 용도
+    // 종목명으로 코드를 stock_info에서 조회 후 Yahoo Finance에서 주가 데이터 초기화
     @Transactional
-    public void initializeStockData(String stockName, String stockCode, String market) {
+    public void initializeStockData(String stockName) {
+        StockInfo info = stockInfoService.findByName(stockName);
+        String stockCode = info.getStockCode();
+        String market = info.getMarket();
+
         LocalDate startDate = LocalDate.of(2025, 1, 1);
         LocalDate endDate = LocalDate.now();
 
         log.info("Initializing stock data for {} ({}) from {} to {}",
                 stockName, stockCode, startDate, endDate);
 
-        // Yahoo Finance에서 데이터 가져오기
-        String yahooSymbol = stockCode + ".KS";  // 코스피: .KS, 코스닥: .KQ
+        // 코스피: .KS, 코스닥: .KQ
+        String yahooSuffix = "KOSDAQ".equals(market) ? ".KQ" : ".KS";
+        String yahooSymbol = stockCode + yahooSuffix;
         List<StockPriceData> priceDataList = yahooFinanceClient.fetchStockPrices(
                 yahooSymbol, startDate, endDate
         );
@@ -88,20 +95,52 @@ public class StockPriceService {
         log.info("Saved {} price records for {}", savedCount, stockName);
     }
 
+    // 하위 호환용 오버로드 (stockCode, market을 직접 넘기는 경우)
+    @Transactional
+    public void initializeStockData(String stockName, String stockCode, String market) {
+        LocalDate startDate = LocalDate.of(2025, 1, 1);
+        LocalDate endDate = LocalDate.now();
+
+        log.info("Initializing stock data for {} ({}) from {} to {}",
+                stockName, stockCode, startDate, endDate);
+
+        String yahooSuffix = "KOSDAQ".equals(market) ? ".KQ" : ".KS";
+        String yahooSymbol = stockCode + yahooSuffix;
+        List<StockPriceData> priceDataList = yahooFinanceClient.fetchStockPrices(
+                yahooSymbol, startDate, endDate
+        );
+
+        if (priceDataList.isEmpty()) {
+            log.warn("No data fetched for {}", stockName);
+            return;
+        }
+
+        int savedCount = 0;
+        for (StockPriceData data : priceDataList) {
+            if (!stockPriceRepository.existsByStockCodeAndTradeDate(stockCode, data.getDate())) {
+                StockPrice stockPrice = StockPrice.builder()
+                        .stockCode(stockCode)
+                        .stockName(stockName)
+                        .market(market)
+                        .tradeDate(data.getDate())
+                        .closePrice(data.getClosePrice())
+                        .build();
+
+                stockPriceRepository.save(stockPrice);
+                savedCount++;
+            }
+        }
+
+        log.info("Saved {} price records for {}", savedCount, stockName);
+    }
+
     //DB에 저장된 데이터 개수 확인
     public long getDataCount() {
         return stockPriceRepository.count();
     }
 
-    @Transactional(readOnly = true)
     public List<String> searchStockNames(String keyword) {
         log.info("Searching for stocks with keyword: {}", keyword);
-
-        List<String> allStocks = stockPriceRepository.findDistinctStockNames();
-
-        return allStocks.stream()
-                .filter(name -> name.contains(keyword))
-                .limit(10)
-                .collect(Collectors.toList());
+        return stockInfoService.searchByKeyword(keyword);
     }
 }

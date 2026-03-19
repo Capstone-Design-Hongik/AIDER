@@ -1,5 +1,6 @@
 package com.inveskit.backend.service;
 
+import com.inveskit.backend.domain.StockInfo;
 import com.inveskit.backend.domain.Trade;
 import com.inveskit.backend.dto.TradeCreateRequest;
 import com.inveskit.backend.dto.TradeResponse;
@@ -18,6 +19,7 @@ import java.util.stream.Collectors;
 public class TradeService {
 
     private final TradeRepository tradeRepository;
+    private final StockInfoService stockInfoService;
 
     // 거래 생성
     @Transactional
@@ -25,7 +27,8 @@ public class TradeService {
         log.info("Creating trade: {} {} on {}",
                 request.getStockName(), request.getTradeType(), request.getDate());
 
-        Trade trade = request.toEntity();
+        StockInfo stockInfo = stockInfoService.findByName(request.getStockName());
+        Trade trade = request.toEntity(stockInfo.getStockCode());
         Trade saved = tradeRepository.save(trade);
 
         return TradeResponse.from(saved);

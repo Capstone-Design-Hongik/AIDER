@@ -1,7 +1,6 @@
 package com.inveskit.backend.dto;
 
 import com.inveskit.backend.domain.Trade;
-import com.inveskit.backend.util.StockCodeMapper;
 import lombok.*;
 
 import java.time.LocalDate;
@@ -17,10 +16,7 @@ public class TradeCreateRequest {
     private Double price;
     private Integer quantity;
 
-    public Trade toEntity() {
-
-        String stockCode = StockCodeMapper.getStockCode(stockName);
-
+    public Trade toEntity(String stockCode) {
         return Trade.builder()
                 .stockName(stockName)
                 .stockCode(stockCode)
