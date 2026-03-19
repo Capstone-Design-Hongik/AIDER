@@ -5,9 +5,9 @@ import com.inveskit.backend.dto.AnalysisResponse;
 import com.inveskit.backend.dto.StockPriceResponse;
 import com.inveskit.backend.dto.TradeResponse;
 import com.inveskit.backend.service.AnalysisService;
+import com.inveskit.backend.service.StockInfoService;
 import com.inveskit.backend.service.StockPriceService;
 import com.inveskit.backend.service.TradeService;
-import com.inveskit.backend.util.StockCodeMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +26,7 @@ public class AnalysisController {
     private final AnalysisService analysisService;
     private final TradeService tradeService;
     private final StockPriceService stockPriceService;
+    private final StockInfoService stockInfoService;
 
     @PostMapping
     public ResponseEntity<AnalysisResponse> analyzeTrading(
@@ -57,7 +58,7 @@ public class AnalysisController {
             // 3. Flask API 요청 형식으로 변환
             List<AnalysisRequest.TradeInfo> tradeInfos = trades.stream()
                     .map(trade -> {
-                        String stockCode = StockCodeMapper.getStockCode(trade.getStockName());
+                        String stockCode = stockInfoService.findByName(trade.getStockName()).getStockCode();
                         return AnalysisRequest.TradeInfo.builder()
                                 .stockName(trade.getStockName())
                                 .stockCode(stockCode)

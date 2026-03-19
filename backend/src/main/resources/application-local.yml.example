@@ -1,0 +1,6 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/inveskit
+    driver-class-name: org.postgresql.Driver
+    username: inveskit
+    password: your_password_here   # 본인 DB 비밀번호로 변경
