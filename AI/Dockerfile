@@ -29,7 +29,7 @@ CMD uvicorn main_server:app --host 0.0.0.0 --port $PORT
 ---
 
 ### 수정 3: `requirements.txt` (`python-dotenv` 추가)
-```
+
 fastapi
 uvicorn
 openai

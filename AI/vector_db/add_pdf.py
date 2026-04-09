@@ -53,9 +53,9 @@ def add_pdf_to_db(pdf_path: str, category: str = "stock") -> int:
             docs.append(Document(
                 page_content=chunk,
                 metadata={
-                    "category": category,
-                    "source": file_name,   # [수정] 출처 파일명 추가
-                    "page": page_num,      # [수정] 페이지 번호 추가
+                    "category": category,  # (예: "stock", "economy", "report")
+                    "source": file_name,   # 출처 파일명 추가
+                    "page": page_num,      # 페이지 번호 추가
                 },
             ))
 
