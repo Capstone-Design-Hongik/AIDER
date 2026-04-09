@@ -26,6 +26,8 @@ const StockTradingAnalyzer = () => {
   const [stockData, setStockData] = useState(null);
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState(null);
+  const [currentPrices, setCurrentPrices] = useState({});
+  const [mypagePricesLoading, setMypagePricesLoading] = useState(false);
 
   const generateMockStockData = () => {
     const data = [];
@@ -101,6 +103,49 @@ React.useEffect(() => {
   fetchData();
 }, [currentPage, trades]);
 
+// 3. 마이페이지 진입 시 보유 종목 현재 주가 조회
+React.useEffect(() => {
+  const fetchCurrentPrices = async () => {
+    if (currentPage !== 'mypage' || trades.length === 0) return;
+
+    const heldStocks = {};
+    trades.forEach(t => {
+      if (!heldStocks[t.stockName]) heldStocks[t.stockName] = { buy: 0, sell: 0 };
+      if (t.tradeType === 'buy') heldStocks[t.stockName].buy += parseInt(t.quantity);
+      else heldStocks[t.stockName].sell += parseInt(t.quantity);
+    });
+
+    const stocksToFetch = Object.keys(heldStocks).filter(
+      name => heldStocks[name].buy - heldStocks[name].sell > 0
+    );
+
+    if (stocksToFetch.length === 0) return;
+
+    setMypagePricesLoading(true);
+    try {
+      const results = await Promise.all(
+        stocksToFetch.map(name =>
+          stockApi.getStockPrices(name, null).then(res => ({
+            name,
+            price: res.prices && res.prices.length > 0
+              ? res.prices[res.prices.length - 1].closePrice
+              : null
+          })).catch(() => ({ name, price: null }))
+        )
+      );
+      const priceMap = {};
+      results.forEach(({ name, price }) => { priceMap[name] = price; });
+      setCurrentPrices(priceMap);
+    } catch {
+      // 조회 실패 시 빈 상태 유지
+    } finally {
+      setMypagePricesLoading(false);
+    }
+  };
+
+  fetchCurrentPrices();
+}, [currentPage, trades]);
+
   const handleStockNameChange = async (value) => {
   setCurrentTrade({...currentTrade, stockName: value});
   
@@ -128,6 +173,15 @@ React.useEffect(() => {
 
   const addTrade = async () => {
   if (currentTrade.stockName && currentTrade.date && currentTrade.price && currentTrade.quantity) {
+    if (currentTrade.tradeType === 'sell') {
+      const heldQty = trades
+        .filter(t => t.stockName === currentTrade.stockName)
+        .reduce((sum, t) => sum + (t.tradeType === 'buy' ? 1 : -1) * (parseInt(t.quantity, 10) || 0), 0);
+      if ((parseInt(currentTrade.quantity, 10) || 0) > heldQty) {
+        alert(`보유 수량(${heldQty}주)을 초과하여 매도할 수 없습니다.`);
+        return;
+      }
+    }
     try {
       const response = await stockApi.createTrade(currentTrade);
       setTrades([...trades, response]);
@@ -199,6 +253,40 @@ React.useEffect(() => {
 
   const removeSavedStrategy = (id) => {
     setSavedStrategies(savedStrategies.filter(s => s.id !== id));
+  };
+
+  const downloadCSV = () => {
+    const escapeCSV = (value) => {
+      const str = String(value);
+      if (/^[=+\-@\t\r]/.test(str)) return `"'${str.replace(/"/g, '""')}"`;
+      if (str.includes(',') || str.includes('"') || str.includes('\n')) return `"${str.replace(/"/g, '""')}"`;
+      return str;
+    };
+    const header = '종목명,거래구분,날짜,가격(원),수량(주),거래금액(원)';
+    const rows = trades.map(t => {
+      const price = parseFloat(t.price) || 0;
+      const qty = parseInt(t.quantity, 10) || 0;
+      return [
+        escapeCSV(t.stockName),
+        escapeCSV(t.tradeType === 'buy' ? '매수' : '매도'),
+        escapeCSV(t.date),
+        escapeCSV(price),
+        escapeCSV(qty),
+        escapeCSV(Math.round(price * qty))
+      ].join(',');
+    });
+    const csv = [header, ...rows].join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `inveskit_trades_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadPDF = () => {
+    window.print();
   };
 
   const renderInputPage = () => (
@@ -655,43 +743,76 @@ React.useEffect(() => {
 
 
   const renderMyPage = () => {
-    const totalInvestment = trades.reduce((sum, t) => {
+    // 날짜 순 정렬 후 이동평균법으로 실현 손익 계산 (매도 시점의 정확한 평균단가 반영)
+    const sortedTrades = [...trades].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const runningAvg = {};
+    let realizedProfitLoss = 0;
+
+    sortedTrades.forEach(t => {
+      const name = t.stockName;
+      if (!runningAvg[name]) runningAvg[name] = { qty: 0, amount: 0 };
+      const qty = parseInt(t.quantity, 10) || 0;
+      const price = parseFloat(t.price) || 0;
       if (t.tradeType === 'buy') {
-        return sum + (parseFloat(t.price) * parseInt(t.quantity));
-      }
-      return sum;
-    }, 0);
-
-    const totalSales = trades.reduce((sum, t) => {
-      if (t.tradeType === 'sell') {
-        return sum + (parseFloat(t.price) * parseInt(t.quantity));
-      }
-      return sum;
-    }, 0);
-
-    const profitLoss = totalSales - totalInvestment;
-    const profitRate = totalInvestment > 0 ? ((profitLoss / totalInvestment) * 100).toFixed(2) : 0;
-
-    const stockStats = {};
-    trades.forEach(trade => {
-      if (!stockStats[trade.stockName]) {
-        stockStats[trade.stockName] = { buy: 0, sell: 0, count: 0 };
-      }
-      stockStats[trade.stockName].count++;
-      if (trade.tradeType === 'buy') {
-        stockStats[trade.stockName].buy++;
+        runningAvg[name].qty += qty;
+        runningAvg[name].amount += price * qty;
       } else {
-        stockStats[trade.stockName].sell++;
+        const avgPrice = runningAvg[name].qty > 0 ? runningAvg[name].amount / runningAvg[name].qty : 0;
+        realizedProfitLoss += (price - avgPrice) * qty;
+        runningAvg[name].qty -= qty;
+        runningAvg[name].amount = runningAvg[name].qty > 0 ? avgPrice * runningAvg[name].qty : 0;
       }
     });
 
+    // 종목별 집계 (UI 표시용)
+    const holdingsByStock = {};
+    trades.forEach(t => {
+      const name = t.stockName;
+      if (!holdingsByStock[name]) {
+        holdingsByStock[name] = { totalBuyQty: 0, totalBuyAmount: 0, totalSellQty: 0, buyCount: 0, sellCount: 0 };
+      }
+      const qty = parseInt(t.quantity, 10) || 0;
+      const price = parseFloat(t.price) || 0;
+      if (t.tradeType === 'buy') {
+        holdingsByStock[name].totalBuyQty += qty;
+        holdingsByStock[name].totalBuyAmount += price * qty;
+        holdingsByStock[name].buyCount++;
+      } else {
+        holdingsByStock[name].totalSellQty += qty;
+        holdingsByStock[name].sellCount++;
+      }
+    });
+
+    Object.keys(holdingsByStock).forEach(name => {
+      const s = holdingsByStock[name];
+      // 현재 보유분 평균단가는 이동평균 기준
+      s.avgBuyPrice = runningAvg[name]?.qty > 0
+        ? Math.round(runningAvg[name].amount / runningAvg[name].qty)
+        : (s.totalBuyQty > 0 ? Math.round(s.totalBuyAmount / s.totalBuyQty) : 0);
+      s.holdingQty = s.totalBuyQty - s.totalSellQty;
+    });
+
+    // 미실현 손익: 보유 수량 × (현재가 - 평균매수가)
+    const unrealizedProfitLoss = Object.entries(holdingsByStock).reduce((sum, [name, s]) => {
+      if (s.holdingQty <= 0) return sum;
+      const curPrice = currentPrices[name];
+      if (!curPrice) return sum;
+      return sum + (curPrice - s.avgBuyPrice) * s.holdingQty;
+    }, 0);
+
+    const totalInvestment = Object.values(holdingsByStock).reduce((sum, s) => sum + s.totalBuyAmount, 0);
+    const totalProfitLoss = Math.round(realizedProfitLoss + unrealizedProfitLoss);
+    const profitRate = totalInvestment > 0 ? ((totalProfitLoss / totalInvestment) * 100).toFixed(2) : '0.00';
+
+    const stockStats = holdingsByStock;
+
     const topStocks = Object.entries(stockStats)
-      .sort((a, b) => b[1].count - a[1].count)
+      .sort((a, b) => (b[1].buyCount + b[1].sellCount) - (a[1].buyCount + a[1].sellCount))
       .slice(0, 5);
 
-    const pieData = Object.entries(stockStats).map(([name, data]) => ({
+    const pieData = Object.entries(holdingsByStock).map(([name, s]) => ({
       name,
-      value: data.count
+      value: s.totalBuyAmount
     }));
 
     const COLORS = ['#0f172a', '#334155', '#64748b', '#94a3b8', '#cbd5e1'];
@@ -717,25 +838,25 @@ React.useEffect(() => {
                   {totalInvestment.toLocaleString()}원
                 </div>
               </div>
-              
-              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                <div className="text-sm text-slate-600 mb-1">총 매도금액</div>
-                <div className="text-2xl font-bold text-slate-900">
-                  {totalSales.toLocaleString()}원
+
+              <div className={`p-4 rounded-lg border ${Math.round(realizedProfitLoss) >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+                <div className={`text-sm mb-1 ${Math.round(realizedProfitLoss) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>실현 손익</div>
+                <div className={`text-2xl font-bold ${Math.round(realizedProfitLoss) >= 0 ? 'text-emerald-900' : 'text-red-900'}`}>
+                  {Math.round(realizedProfitLoss) >= 0 ? '+' : ''}{Math.round(realizedProfitLoss).toLocaleString()}원
                 </div>
               </div>
-              
-              <div className={`p-4 rounded-lg border ${profitLoss >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
-                <div className={`text-sm mb-1 ${profitLoss >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>손익</div>
-                <div className={`text-2xl font-bold ${profitLoss >= 0 ? 'text-emerald-900' : 'text-red-900'}`}>
-                  {profitLoss >= 0 ? '+' : ''}{profitLoss.toLocaleString()}원
+
+              <div className={`p-4 rounded-lg border ${mypagePricesLoading ? 'bg-gray-50 border-gray-200' : Math.round(unrealizedProfitLoss) >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+                <div className={`text-sm mb-1 ${mypagePricesLoading ? 'text-gray-500' : Math.round(unrealizedProfitLoss) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>미실현 손익</div>
+                <div className={`text-2xl font-bold ${mypagePricesLoading ? 'text-gray-400' : Math.round(unrealizedProfitLoss) >= 0 ? 'text-emerald-900' : 'text-red-900'}`}>
+                  {mypagePricesLoading ? '조회 중...' : `${Math.round(unrealizedProfitLoss) >= 0 ? '+' : ''}${Math.round(unrealizedProfitLoss).toLocaleString()}원`}
                 </div>
               </div>
-              
-              <div className={`p-4 rounded-lg border ${profitRate >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
-                <div className={`text-sm mb-1 ${profitRate >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>수익률</div>
-                <div className={`text-2xl font-bold ${profitRate >= 0 ? 'text-emerald-900' : 'text-red-900'}`}>
-                  {profitRate >= 0 ? '+' : ''}{profitRate}%
+
+              <div className={`p-4 rounded-lg border ${parseFloat(profitRate) >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+                <div className={`text-sm mb-1 ${parseFloat(profitRate) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>수익률</div>
+                <div className={`text-2xl font-bold ${parseFloat(profitRate) >= 0 ? 'text-emerald-900' : 'text-red-900'}`}>
+                  {parseFloat(profitRate) >= 0 ? '+' : ''}{profitRate}%
                 </div>
               </div>
             </div>
@@ -768,17 +889,37 @@ React.useEffect(() => {
                 <div>
                   <h4 className="text-sm font-medium text-gray-700 mb-3">보유 종목 현황</h4>
                   <div className="space-y-3">
-                    {Object.entries(stockStats).map(([name, data]) => (
-                      <div key={name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div>
-                          <div className="font-medium text-gray-900">{name}</div>
-                          <div className="text-sm text-gray-500">
-                            매수 {data.buy}건 | 매도 {data.sell}건
+                    {Object.entries(holdingsByStock).map(([name, data]) => {
+                      const curPrice = currentPrices[name];
+                      const unrealized = data.holdingQty > 0 && curPrice
+                        ? Math.round((curPrice - data.avgBuyPrice) * data.holdingQty)
+                        : null;
+                      const unrealizedRate = data.avgBuyPrice > 0 && curPrice
+                        ? (((curPrice - data.avgBuyPrice) / data.avgBuyPrice) * 100).toFixed(2)
+                        : null;
+                      return (
+                        <div key={name} className="p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="font-medium text-gray-900">{name}</div>
+                            <div className="text-sm text-gray-500">보유 {data.holdingQty}주</div>
+                          </div>
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-500">평균단가 {data.avgBuyPrice.toLocaleString()}원</span>
+                            {curPrice && (
+                              <span className="text-gray-500">현재가 {curPrice.toLocaleString()}원</span>
+                            )}
+                          </div>
+                          {unrealized !== null && (
+                            <div className={`text-sm font-medium mt-1 ${unrealized >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                              {unrealized >= 0 ? '+' : ''}{unrealized.toLocaleString()}원 ({unrealized >= 0 ? '+' : ''}{unrealizedRate}%)
                             </div>
+                          )}
+                          {data.holdingQty <= 0 && (
+                            <div className="text-xs text-gray-400 mt-1">전량 매도 완료</div>
+                          )}
                         </div>
-                        <div className="text-lg font-bold text-gray-900">{data.count}건</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -832,7 +973,7 @@ React.useEffect(() => {
                       </div>
                       <div className="flex-1 flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <span className="font-medium text-gray-900">{name}</span>
-                        <span className="text-gray-600">{data.count}건</span>
+                        <span className="text-gray-600">{data.buyCount + data.sellCount}건</span>
                       </div>
                     </div>
                   ))}
@@ -887,12 +1028,12 @@ React.useEffect(() => {
             </h3>
             
             <div className="space-y-3">
-              <button className="w-full bg-slate-900 text-white py-3 rounded-lg font-medium hover:bg-slate-800 transition-colors flex items-center justify-center gap-2">
+              <button onClick={downloadCSV} className="w-full bg-slate-900 text-white py-3 rounded-lg font-medium hover:bg-slate-800 transition-colors flex items-center justify-center gap-2">
                 <Download className="w-4 h-4" />
                 거래 내역 다운로드 (CSV)
               </button>
-              
-              <button className="w-full bg-white text-slate-900 py-3 rounded-lg font-medium border-2 border-slate-900 hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
+
+              <button onClick={downloadPDF} className="w-full bg-white text-slate-900 py-3 rounded-lg font-medium border-2 border-slate-900 hover:bg-slate-50 transition-colors flex items-center justify-center gap-2">
                 <BarChart3 className="w-4 h-4" />
                 분석 결과 다운로드 (PDF)
               </button>
