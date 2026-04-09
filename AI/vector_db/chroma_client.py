@@ -1,100 +1,199 @@
 # vector_db/chroma_client.py
 import os
+from typing import List, Optional
+from langchain_core.documents import Document
 import chromadb
-from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
+from chromadb import PersistentClient
+
+# ── 설정 ────────────────────────────────────────────────────────────────
+LOCAL_MODEL_DIR = "./local_model"       # download_model.py 로 내려받은 경로
+REMOTE_MODEL_ID = "BAAI/bge-m3"         # 대체 모델 (Jina → BGE-M3로 변경)
+
+# MRL은 폐기했으므로 고정 차원 사용
+EMBEDDING_DIM = 1024                    # BGE-M3 기본 차원
 
 CHROMA_PATH = "./chroma_db"
-COLLECTION_NAME = "stock_documents"
+COLLECTION_NAME = "youtube_strategy"
 
-# [로컬] download_model.py로 받은 모델 경로
-LOCAL_MODEL_PATH = "./local_model"
-HF_MODEL_NAME = "BAAI/bge-m3"
+# ── 임베딩 모델 로드 (싱글톤) ────────────────────────────────────────────
+_embed_model = None
 
-_embeddings = None
-_vectorstore = None
+def _get_embed_model():
+    """BGE-M3 모델을 싱글톤으로 로드"""
+    global _embed_model
+    if _embed_model is not None:
+        return _embed_model
 
+    from sentence_transformers import SentenceTransformer
 
-def get_embeddings() -> HuggingFaceEmbeddings:
-    """임베딩 모델 싱글톤 반환 — 로컬 모델 우선, 없으면 HuggingFace Hub"""
-    global _embeddings
-    if _embeddings is not None:
-        print("[Debug] 기존 임베딩 모델 재사용")
-        return _embeddings
+    model_path = LOCAL_MODEL_DIR if os.path.isdir(LOCAL_MODEL_DIR) else REMOTE_MODEL_ID
+    print(f"[ChromaClient] 임베딩 모델 로드: {model_path}")
 
-    # [로컬] ./local_model 폴더가 있으면 오프라인 사용
-    if os.path.isdir(LOCAL_MODEL_PATH):
-        model_name = LOCAL_MODEL_PATH
-        print(f"[Debug] 로컬 모델 사용: {LOCAL_MODEL_PATH}")
-    else:
-        model_name = HF_MODEL_NAME
-        print(f"[Debug] 로컬 모델 없음 → HuggingFace Hub에서 로드: {HF_MODEL_NAME}")
-
-    _embeddings = HuggingFaceEmbeddings(
-        model_name=model_name,
-        model_kwargs={"device": "cpu"},
-        encode_kwargs={"normalize_embeddings": True},
+    _embed_model = SentenceTransformer(
+        model_path,
+        trust_remote_code=True,
     )
-    return _embeddings
+    print(f"[ChromaClient] ✅ 모델 로드 완료 (차원: {EMBEDDING_DIM})")
+    return _embed_model
 
 
-def get_vectorstore() -> Chroma:
-    """PersistentClient 기반 Chroma vectorstore 싱글톤 반환"""
-    global _vectorstore
-    if _vectorstore is not None:
-        return _vectorstore
+def embed_texts(texts: List[str]) -> List[List[float]]:
+    """
+    텍스트 목록을 임베딩으로 변환
+    
+    Args:
+        texts: 변환할 텍스트 리스트
+    
+    Returns:
+        List[List[float]]: 임베딩 벡터 리스트
+    """
+    model = _get_embed_model()
+    print(f"[ChromaClient] {len(texts)}개 텍스트 임베딩 중...")
+    embeddings = model.encode(texts, convert_to_tensor=False)
+    
+    # numpy array를 list로 변환
+    if hasattr(embeddings, 'tolist'):
+        embeddings = embeddings.tolist()
+    
+    print(f"[ChromaClient] ✅ 임베딩 완료")
+    return embeddings
 
-    print(f"[VectorDB] PersistentClient 연결 중... (경로: {CHROMA_PATH})")
-    client = chromadb.PersistentClient(path=CHROMA_PATH)
-    _vectorstore = Chroma(
-        collection_name=COLLECTION_NAME,
-        embedding_function=get_embeddings(),
-        client=client,
-    )
-    total = _vectorstore._collection.count()
-    print(f"[VectorDB] ✅ 연결 완료! 현재 저장된 청크 수: {total}개")
-    return _vectorstore
+
+# ── ChromaDB 클라이언트 ──────────────────────────────────────────────────
+_chroma_client: Optional[PersistentClient] = None
+_collection = None
 
 
-def get_chunk_count() -> int:
-    return get_vectorstore()._collection.count()
+def get_chroma_client() -> PersistentClient:
+    """ChromaDB 클라이언트 싱글톤"""
+    global _chroma_client
+    if _chroma_client is None:
+        print(f"[ChromaClient] ChromaDB 초기화: {CHROMA_PATH}")
+        _chroma_client = PersistentClient(path=CHROMA_PATH)
+    return _chroma_client
 
 
-def reset_memory():
-    """메모리 상의 싱글톤만 초기화 (디스크 DB는 유지)"""
-    global _embeddings, _vectorstore
-    _embeddings = None
-    _vectorstore = None
-    print("[Info] 메모리 초기화 완료 (디스크 DB는 유지됨)")
+def get_collection():
+    """YouTube 자막 컬렉션 가져오기"""
+    global _collection
+    if _collection is None:
+        client = get_chroma_client()
+        _collection = client.get_or_create_collection(
+            name=COLLECTION_NAME,
+            metadata={"description": "YouTube 투자 전략 영상 자막 저장소"},
+        )
+    return _collection
 
 
 def video_exists(video_id: str) -> bool:
-    """특정 video_id의 자막이 이미 DB에 저장되어 있는지 확인"""
-    vs = get_vectorstore()
+    """특정 video_id의 데이터가 DB에 존재하는지 확인"""
+    collection = get_collection()
     try:
-        category = f"youtube_{video_id}"
-        results = vs._collection.get(where={"category": category}, limit=1)
-        exists = len(results["ids"]) > 0
+        result = collection.get(
+            where={"video_id": video_id},
+            limit=1
+        )
+        exists = bool(result and result.get('ids'))
         if exists:
-            print(f"[VectorDB] video_id '{video_id}' 는 이미 DB에 저장되어 있습니다. 임베딩 스킵.")
+            print(f"[ChromaClient] 캐시 히트: {video_id} ✅")
         return exists
     except Exception as e:
-        print(f"[Warning] video_exists 확인 실패: {e}")
+        print(f"[ChromaClient] 캐시 확인 실패: {e}")
         return False
 
 
-def search(query: str, k: int = 3, category: str = None) -> list:
-    """유사도 검색 (공통 검색 함수)"""
-    vs = get_vectorstore()
-    print(f"\n[Search] 질의: '{query}' | category={category or '전체'}")
+def add_documents(documents: List[Document], video_id: str) -> int:
+    """
+    문서를 ChromaDB에 추가
+    
+    Args:
+        documents: LangChain Document 리스트
+        video_id: YouTube 영상 ID
+    
+    Returns:
+        추가된 문서 수
+    """
+    if not documents:
+        print("[ChromaClient] 추가할 문서가 없습니다.")
+        return 0
 
-    filter_dict = {"category": category} if category else None
-    results = vs.similarity_search(query, k=k, filter=filter_dict)
+    collection = get_collection()
+    
+    # 텍스트 추출
+    texts = [doc.page_content for doc in documents]
+    
+    # 임베딩 생성
+    embeddings = embed_texts(texts)
+    
+    # ID와 메타데이터 생성
+    ids = [f"{video_id}_{i}" for i in range(len(documents))]
+    metadatas = [
+        {
+            "video_id": video_id,
+            **doc.metadata
+        }
+        for doc in documents
+    ]
+    
+    # ChromaDB에 추가
+    collection.add(
+        ids=ids,
+        embeddings=embeddings,
+        documents=texts,
+        metadatas=metadatas
+    )
+    
+    print(f"[ChromaClient] ✅ {len(documents)}개 문서 저장 완료")
+    return len(documents)
 
-    print(f"[Search] 검색 결과 {len(results)}건:")
-    for i, res in enumerate(results):
-        preview = res.page_content[:80].replace("\n", " ")
-        cat = res.metadata.get("category", "N/A")
-        print(f"  [{i+1}] [{cat}] {preview}...")
 
-    return results
+def search(query: str, k: int = 4, video_id: Optional[str] = None) -> List[Document]:
+    """
+    쿼리 기반 벡터 검색
+    
+    Args:
+        query: 검색 쿼리 텍스트
+        k: 반환할 결과 수
+        video_id: 특정 영상으로만 검색 (None이면 전체)
+    
+    Returns:
+        List[Document]: 유사한 문서 리스트
+    """
+    collection = get_collection()
+    
+    # 쿼리 임베딩
+    query_embedding = embed_texts([query])[0]
+    
+    # where 필터
+    where_filter = {"video_id": video_id} if video_id else None
+    
+    # 검색
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=k,
+        where=where_filter
+    )
+    
+    # 결과를 Document로 변환
+    documents = []
+    if results['ids'] and len(results['ids']) > 0:
+        for i, doc_id in enumerate(results['ids'][0]):
+            doc = Document(
+                page_content=results['documents'][0][i],
+                metadata=results['metadatas'][0][i] if results['metadatas'] else {}
+            )
+            documents.append(doc)
+    
+    print(f"[ChromaClient] 검색 완료: {len(documents)}개 결과")
+    return documents
+
+
+def get_stats() -> dict:
+    """DB 통계"""
+    collection = get_collection()
+    count = collection.count()
+    return {
+        "collection": COLLECTION_NAME,
+        "total_documents": count,
+        "embedding_dim": EMBEDDING_DIM
+    }

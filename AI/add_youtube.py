@@ -1,13 +1,11 @@
-# vector_db/add_youtube.py
 from typing import List
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 from chroma_client import add_documents, video_exists
 
-# ── 청크 분할 설정 ───────────────────────────────────────────────────────
-CHUNK_SIZE = 500        # 글자 수 기준
-CHUNK_OVERLAP = 80      # 청크 간 겹치는 글자 수
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 80
 
 _splitter = RecursiveCharacterTextSplitter(
     chunk_size=CHUNK_SIZE,
@@ -15,30 +13,15 @@ _splitter = RecursiveCharacterTextSplitter(
     separators=["\n\n", "\n", ". ", " ", ""],
 )
 
-
 def add_youtube_to_db(transcript_text: str, video_id: str) -> int:
-    """
-    YouTube 자막 텍스트를 청크로 분할 → 임베딩 → ChromaDB 저장
-
-    Args:
-        transcript_text: 자막 전체 텍스트
-        video_id: YouTube 영상 ID
-
-    Returns:
-        추가된 청크 수 (이미 존재하면 0)
-    """
     category = f"youtube_{video_id}"
-
-    # 중복 체크
     if video_exists(video_id):
         print(f"[AddYouTube] 캐시 히트: '{video_id}'는 이미 DB에 있습니다.")
         return 0
 
-    # 텍스트 청크 분할
     chunks: List[str] = _splitter.split_text(transcript_text)
     print(f"[AddYouTube] 자막 {len(transcript_text):,}자 → {len(chunks)}청크 분할 완료")
 
-    # Document 객체 생성
     docs = [
         Document(
             page_content=chunk,
@@ -47,7 +30,5 @@ def add_youtube_to_db(transcript_text: str, video_id: str) -> int:
         for chunk in chunks
     ]
 
-    # ChromaDB에 추가
     added_count = add_documents(docs, video_id)
-    
     return added_count
