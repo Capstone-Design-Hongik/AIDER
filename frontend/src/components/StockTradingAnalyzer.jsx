@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { TrendingUp, BarChart3, Plus, Trash2, AlertCircle, FileText, Activity, User, PieChart, Download, Bookmark } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceDot, PieChart as RechartsPie, Pie, Cell, BarChart, Bar } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceDot, PieChart as RechartsPie, Pie, Cell } from 'recharts';
 import stockApi from '../api/stockApi';
 
 const StockTradingAnalyzer = () => {
@@ -29,30 +29,6 @@ const StockTradingAnalyzer = () => {
   const [currentPrices, setCurrentPrices] = useState({});
   const [mypagePricesLoading, setMypagePricesLoading] = useState(false);
 
-  const generateMockStockData = () => {
-    const data = [];
-    const basePrice = 70000;
-    const today = new Date();
-    
-    for (let i = 59; i >= 0; i--) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      
-      const randomChange = (Math.random() - 0.5) * 3000;
-      const price = basePrice + randomChange + (Math.sin(i / 10) * 2000);
-      
-      data.push({
-        date: date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }),
-        fullDate: date.toISOString().split('T')[0],
-        close: Math.round(price),
-        open: Math.round(price + (Math.random() - 0.5) * 1000),
-        high: Math.round(price + Math.random() * 1500),
-        low: Math.round(price - Math.random() * 1500)
-      });
-    }
-    
-    return data;
-  };
 
   // 1. 컴포넌트 마운트 시 거래 내역 불러오기
 React.useEffect(() => {
