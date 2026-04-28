@@ -281,7 +281,9 @@ React.useEffect(() => {
     const a = document.createElement('a');
     a.href = url;
     a.download = `inveskit_trades_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
   };
 
@@ -795,8 +797,8 @@ React.useEffect(() => {
     // 미실현 손익: 보유 수량 × (현재가 - 평균매수가)
     const unrealizedProfitLoss = Object.entries(holdingsByStock).reduce((sum, [name, s]) => {
       if (s.holdingQty <= 0) return sum;
-      const curPrice = currentPrices[name];
-      if (!curPrice) return sum;
+      const curPrice = Number(currentPrices[name]) || null;
+      if (!curPrice || curPrice <= 0) return sum;
       return sum + (curPrice - s.avgBuyPrice) * s.holdingQty;
     }, 0);
 
