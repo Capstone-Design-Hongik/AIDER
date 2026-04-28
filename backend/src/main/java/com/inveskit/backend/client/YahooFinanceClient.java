@@ -26,8 +26,8 @@ public class YahooFinanceClient {
     private String baseUrl;
 
     public List<StockPriceData> fetchStockPrices(String symbol, LocalDate startDate, LocalDate endDate) {
-        long period1 = startDate.atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
-        long period2 = endDate.atTime(23, 59, 59).atZone(ZoneId.systemDefault()).toEpochSecond();
+        long period1 = startDate.atStartOfDay(ZoneId.of("Asia/Seoul")).toEpochSecond();
+        long period2 = endDate.atTime(23, 59, 59).atZone(ZoneId.of("Asia/Seoul")).toEpochSecond();
 
         String url = String.format(
                 "%s/v8/finance/chart/%s?period1=%d&period2=%d&interval=1d",
@@ -99,7 +99,7 @@ public class YahooFinanceClient {
                 Long timestamp = convertObjectToLong(timestampObj);
 
                 LocalDate date = Instant.ofEpochSecond(timestamp)
-                        .atZone(ZoneId.systemDefault())
+                        .atZone(ZoneId.of("Asia/Seoul"))
                         .toLocalDate();
 
                 Object closeObj = closes.get(i);

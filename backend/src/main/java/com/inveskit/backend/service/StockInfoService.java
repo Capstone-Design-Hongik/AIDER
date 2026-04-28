@@ -69,6 +69,11 @@ public class StockInfoService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<StockInfo> findAll() {
+        return stockInfoRepository.findAll();
+    }
+
     public long count() {
         return stockInfoRepository.count();
     }
