@@ -2,6 +2,12 @@ spring:
   application:
     name: inveskit-backend
 
+  datasource:
+    url: ${JDBC_DATABASE_URL:${DATABASE_URL}}
+    driver-class-name: org.postgresql.Driver
+    username: ${JDBC_DATABASE_USERNAME:${DATABASE_USERNAME:}}
+    password: ${JDBC_DATABASE_PASSWORD:${DATABASE_PASSWORD:}}
+
   jpa:
     hibernate:
       ddl-auto: update        # 기존 데이터 유지하며 스키마 변경만 반영
@@ -10,6 +16,12 @@ spring:
       hibernate:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  task:
+    scheduling:
+      pool:
+        size: 2
+      thread-name-prefix: scheduling-
 
 logging:
   level:

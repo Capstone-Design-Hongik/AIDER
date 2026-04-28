@@ -134,6 +134,41 @@ public class StockPriceService {
         log.info("Saved {} price records for {}", savedCount, stockName);
     }
 
+    @Transactional
+    public int fetchAndSavePrices(StockInfo stockInfo, LocalDate startDate, LocalDate endDate) {
+        String stockCode = stockInfo.getStockCode();
+        String stockName = stockInfo.getStockName();
+        String market = stockInfo.getMarket();
+
+        String yahooSuffix = "KOSDAQ".equals(market) ? ".KQ" : ".KS";
+        String yahooSymbol = stockCode + yahooSuffix;
+
+        List<StockPriceData> priceDataList = yahooFinanceClient.fetchStockPrices(
+                yahooSymbol, startDate, endDate
+        );
+
+        if (priceDataList.isEmpty()) {
+            return 0;
+        }
+
+        int savedCount = 0;
+        for (StockPriceData data : priceDataList) {
+            if (!stockPriceRepository.existsByStockCodeAndTradeDate(stockCode, data.getDate())) {
+                StockPrice stockPrice = StockPrice.builder()
+                        .stockCode(stockCode)
+                        .stockName(stockName)
+                        .market(market)
+                        .tradeDate(data.getDate())
+                        .closePrice(data.getClosePrice())
+                        .build();
+                stockPriceRepository.save(stockPrice);
+                savedCount++;
+            }
+        }
+
+        return savedCount;
+    }
+
     //DB에 저장된 데이터 개수 확인
     public long getDataCount() {
         return stockPriceRepository.count();
