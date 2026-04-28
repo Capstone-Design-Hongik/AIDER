@@ -3,10 +3,8 @@ spring:
     name: inveskit-backend
 
   datasource:
-    url: ${JDBC_DATABASE_URL:${DATABASE_URL}}
+    url: ${SPRING_DATASOURCE_URL}
     driver-class-name: org.postgresql.Driver
-    username: ${JDBC_DATABASE_USERNAME:${DATABASE_USERNAME:}}
-    password: ${JDBC_DATABASE_PASSWORD:${DATABASE_PASSWORD:}}
 
   jpa:
     hibernate:
