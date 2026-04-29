@@ -1,6 +1,4 @@
 import asyncio
-import os
-from datetime import datetime
 from typing import Dict
 
 from models import UserData, AgentDecision, RAGOutput, ScoreBreakdown
@@ -9,7 +7,7 @@ from tools import (
     VectorSearchTool, RefinedSearchTool, ValidationTool,
     _chat, _extract_json,
 )
-from config import LLMConfig, RAG_K_DEFAULT, SEARCH_CONFIDENCE_THRESHOLD
+from config import LLMConfig, RAG_K_DEFAULT
 
 
 class AgentManager:
@@ -49,12 +47,6 @@ class AgentManager:
             asyncio.create_task(self.tools["user_analysis"].execute(user_data)),
             asyncio.create_task(self.tools["transcript_analysis"].execute(user_data.externalUrl)),
         )
-
-        # ── Step 1.5: 자막 → DB 저장 ──────────────────────────
-        print("\n" + "─" * 70)
-        print("Step 1.5️⃣  YouTube 자막 → DB 저장 (검색 전)")
-        print("─" * 70)
-        await self._save_transcript(state["transcript_analysis"])
 
         # ── Step 2: Agent 의사결정 루프 ───────────────────────
         print("\n" + "─" * 70)
@@ -134,48 +126,9 @@ class AgentManager:
             total_score         =total_score,
         )
 
-    # ── DB 저장 ────────────────────────────────────────────────────
-
-    async def _save_transcript(self, transcript_result) -> None:
-        if not transcript_result:
-            print("  ⚠️  자막 없음 → 건너뜀")
-            return
-        try:
-            from langchain_core.documents import Document
-            strategy_name = transcript_result.structure.get("strategy_name", "일반 투자 조언")
-            video_id      = transcript_result.structure.get("video_id", "unknown")
-            documents = []
-
-            full_content = " ".join(
-                f"{s.section_name}: {s.summary}" for s in transcript_result.sections
-            )
-            documents.append(Document(page_content=full_content, metadata={
-                "source": "youtube_transcript", "video_id": video_id,
-                "strategy_name": strategy_name, "type": "transcript_summary",
-                "added_at": datetime.now().isoformat(),
-            }))
-
-            for sec in transcript_result.sections:
-                content = f"{sec.section_name}\n{sec.summary}\n" + "\n".join(
-                    f"- {pt}" for pt in sec.key_points
-                )
-                documents.append(Document(page_content=content, metadata={
-                    "source": "youtube_section", "video_id": video_id,
-                    "strategy_name": strategy_name, "section_name": sec.section_name,
-                    "emotion": sec.emotion,
-                    "target_audience": ",".join(sec.target_audience),
-                    "type": "transcript_section",
-                    "added_at": datetime.now().isoformat(),
-                }))
-
-            count = self.vector_db.add_documents(documents=documents, doc_type="youtube")
-            print(f"  ✅ {count}개 문서 저장 (전략: {strategy_name})")
-        except Exception as e:
-            print(f"  ❌ DB 저장 실패: {e} → 검색 계속")
-
     # ── 의사결정 (규칙 기반) ───────────────────────────────────────
 
-    async def _decide(self, state: Dict, iteration: int) -> AgentDecision:
+    async def _decide(self, state: Dict, _iteration: int) -> AgentDecision:
         count = len(state["search_results"])
         if count < 3:
             return AgentDecision(
@@ -399,13 +352,17 @@ JSON만 출력:
 - 마크다운 볼드(**), 이탤릭(*) 일절 사용 금지
 - 인사말, 축하 표현 금지
 - 딱딱하고 간결한 어조
-- 600자 내외
 
-구성:
+signal 판단 기준:
+- buy  : 지지선 근처 눌림목이거나 골든크로스 진입 시점, 추가 매수 여지 있음
+- sell : 저항선 돌파 실패, 데드크로스 또는 손절 기준 이탈, 즉시 매도 필요
+- hold : 추세 불명확하거나 관망이 유리한 횡보 구간
+
 아래 JSON 형식으로만 출력하세요:
 {{
-  "evaluation": "해당 매매의 차트 기반 평가 (200자)",
-  "advice": "지금부터의 대응 전략, 진입·청산 가격 포함 (200자)"
+  "signal": "buy 또는 sell 또는 hold",
+  "evaluation": "해당 매매의 차트 기반 평가",
+  "advice": "지금부터의 대응 전략, 진입·청산 가격 포함"
 }}
 """
         return _chat(LLMConfig.FINAL_ADVICE_MODEL, prompt, max_tokens=2000)
