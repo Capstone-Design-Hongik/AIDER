@@ -1,3 +1,4 @@
+import asyncio
 import os
 import sys
 from dotenv import load_dotenv
@@ -13,6 +14,7 @@ from chromadb_manager import ChromaDBManager
 from download_embedding_model import EmbeddingModelManager
 from add_pdf import PDFManager
 from config import VECTOR_DB_PATH
+from tools import _extract_json
 
 load_dotenv()
 
@@ -113,13 +115,13 @@ print("✅ FastAPI 앱 생성 완료", file=sys.stderr)
 vector_db:     ChromaDBManager | None = None
 agent_manager: AgentManager    | None = None
 pdf_manager:   PDFManager      | None = None
+is_ready:      bool            = False
 
 
-@app.on_event("startup")
-async def startup():
-    global vector_db, agent_manager, pdf_manager
+async def _init_in_background():
+    global vector_db, agent_manager, pdf_manager, is_ready
     print("\n" + "=" * 60, file=sys.stderr)
-    print("🚀 FastAPI 서버 초기화 시작", file=sys.stderr)
+    print("🚀 FastAPI 서버 초기화 시작 (백그라운드)", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
 
     db_path = os.getenv("VECTOR_DB_PATH", VECTOR_DB_PATH)
@@ -128,7 +130,8 @@ async def startup():
     try:
         print("\n[초기화-2] 📥 임베딩 모델 로드 중...", file=sys.stderr)
         print("  (torch 로딩으로 처음엔 30~60초 소요)", file=sys.stderr)
-        embedding_model = EmbeddingModelManager.download_model()
+        loop = asyncio.get_event_loop()
+        embedding_model = await loop.run_in_executor(None, EmbeddingModelManager.download_model)
         print("  ✅ 임베딩 모델 로드 완료", file=sys.stderr)
 
         print("\n[초기화-3] 🗄️  ChromaDB 초기화 중...", file=sys.stderr)
@@ -143,17 +146,20 @@ async def startup():
         pdf_manager = PDFManager(vector_db)
         print("  ✅ PDF Manager 생성 완료", file=sys.stderr)
 
+        is_ready = True
         print("\n" + "=" * 60, file=sys.stderr)
         print("✅ 서버 준비 완료!", file=sys.stderr)
-        print("🌐 http://localhost:8000", file=sys.stderr)
-        print("📚 http://localhost:8000/docs", file=sys.stderr)
         print("=" * 60 + "\n", file=sys.stderr)
 
     except Exception as e:
         print(f"\n❌ 초기화 실패: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc(file=sys.stderr)
-        raise
+
+
+@app.on_event("startup")
+async def startup():
+    asyncio.create_task(_init_in_background())
 
 
 @app.on_event("shutdown")
@@ -165,6 +171,8 @@ async def shutdown():
 
 @app.get("/health")
 async def health():
+    if not is_ready:
+        return {"status": "initializing"}
     return {
         "status": "healthy",
         "database": vector_db.get_stats() if vector_db else None,
@@ -205,12 +213,25 @@ async def analyze(data: dict, background_tasks: BackgroundTasks):
         result = await agent_manager.run(user_data)
         print(f"  ✅ Agent 완료 (반복: {len(result.agent_decisions)}회)", file=sys.stderr)
 
-        # 3. 응답 JSON 구성
+        # 3. 응답 JSON 구성 — final_advice는 {"evaluation":..,"advice":..} JSON 문자열
+        try:
+            advice_data = _extract_json(result.final_advice)
+            evaluation  = advice_data.get("evaluation", result.final_advice)
+            advice      = advice_data.get("advice",     result.final_advice)
+            signal      = advice_data.get("signal",     "hold")
+            if signal not in ("buy", "sell", "hold"):
+                signal = "hold"
+        except Exception:
+            evaluation = result.final_advice
+            advice     = result.final_advice
+            signal     = "hold"
+
         response = {
             "code":        user_data.trades[0].stockCode if user_data.trades else "",
             "type":        user_data.trades[0].tradeType if user_data.trades else "",
-            "evaluation":  result.final_advice,
-            "advice":      result.final_advice,
+            "signal":      signal,
+            "evaluation":  evaluation,
+            "advice":      advice,
             "total_score": result.total_score.total,
         }
 

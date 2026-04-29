@@ -14,11 +14,19 @@ from models import (
 from transcript import TranscriptManager
 from config import LLMConfig, SEARCH_CONFIDENCE_THRESHOLD
 
+_openai_client: Optional[OpenAI] = None
+
+
+def _get_client() -> OpenAI:
+    global _openai_client
+    if _openai_client is None:
+        _openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    return _openai_client
+
 
 def _chat(model: str, prompt: str, max_tokens: int = 1500) -> str:
     print(f"\n  💬 LLM 호출: {model} / {len(prompt):,}자")
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-    resp = client.chat.completions.create(
+    resp = _get_client().chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
         max_tokens=max_tokens,
