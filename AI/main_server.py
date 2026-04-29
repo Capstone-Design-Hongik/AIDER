@@ -124,7 +124,7 @@ async def _init_in_background():
 
     try:
         print("\n[초기화-2] 📥 임베딩 모델 로드 중...", file=sys.stderr)
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         embedding_model = await loop.run_in_executor(None, EmbeddingModelManager.download_model)
         print("  ✅ 임베딩 모델 로드 완료", file=sys.stderr)
 
