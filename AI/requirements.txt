@@ -1,3 +1,6 @@
+# PyTorch CPU (CUDA 버전 방지 - Railway 빌드 크기/시간 절감)
+torch --extra-index-url https://download.pytorch.org/whl/cpu
+
 # Web Framework
 fastapi>=0.110.0
 uvicorn>=0.29.0

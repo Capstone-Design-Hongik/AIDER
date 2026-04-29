@@ -2,7 +2,10 @@
 nixPkgs = ["python311", "gcc", "libstdcxx5"]
 
 [phases.install]
-cmds = ["pip install -r requirements.txt"]
+cmds = [
+  "pip install torch --extra-index-url https://download.pytorch.org/whl/cpu",
+  "pip install -r requirements.txt"
+]
 
 [start]
 cmd = "uvicorn main_server:app --host 0.0.0.0 --port $PORT"
