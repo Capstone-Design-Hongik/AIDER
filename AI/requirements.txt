@@ -1,5 +1,5 @@
-# PyTorch CPU (CUDA 버전 방지 - Railway 빌드 크기/시간 절감)
-torch --extra-index-url https://download.pytorch.org/whl/cpu
+# torch는 nixpacks.toml에서 CPU 버전으로 별도 설치 (CUDA 방지)
+# pip install -r 에서 재설치 방지를 위해 여기서는 제외
 
 # Web Framework
 fastapi>=0.110.0
@@ -7,10 +7,10 @@ uvicorn>=0.29.0
 python-multipart>=0.0.9
 
 # LLM
-openai>=1.30.0            # ✅ gpt-4o-mini (분석) + gpt-4o (최종 조언)
+openai>=1.30.0
 
 # Vector DB
-chromadb>=0.4.24          # ✅ PersistentClient 지원 버전
+chromadb>=0.4.24
 
 # Embedding
 sentence-transformers>=2.7.0
@@ -21,7 +21,7 @@ youtube-transcript-api>=0.6.2
 # PDF
 PyPDF2>=3.0.1
 
-# LangChain (PDF/YouTube 청킹용)
+# LangChain
 langchain-core>=0.1.0
 langchain-text-splitters>=0.0.1
 
