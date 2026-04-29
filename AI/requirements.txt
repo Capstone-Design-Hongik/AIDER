@@ -1,47 +1,28 @@
-# ====================================================================
-# 투자 조언 AI 백엔드 - 완전한 의존성 목록
-# ====================================================================
+# Web Framework
+fastapi>=0.110.0
+uvicorn>=0.29.0
+python-multipart>=0.0.9
 
-# [1] 웹 서버 및 환경 설정
-fastapi>=0.111.0
-uvicorn[standard]>=0.29.0
+# LLM
+openai>=1.30.0            # ✅ gpt-4o-mini (분석) + gpt-4o (최종 조언)
+
+# Vector DB
+chromadb>=0.4.24          # ✅ PersistentClient 지원 버전
+
+# Embedding
+sentence-transformers>=2.7.0
+
+# YouTube 자막
+youtube-transcript-api>=0.6.2
+
+# PDF
+PyPDF2>=3.0.1
+
+# LangChain (PDF/YouTube 청킹용)
+langchain-core>=0.1.0
+langchain-text-splitters>=0.0.1
+
+# Utils
 python-dotenv>=1.0.0
-watchfiles>=0.21.0                  # uvicorn auto-reload 감시
-
-# [2] 데이터 검증 및 타입 힌팅
 pydantic>=2.0.0
-pydantic-settings>=2.0.0
-
-# [3] 임베딩 모델 (BGE-M3 한국어 최적화)
-sentence-transformers>=3.0.0        # 임베딩 모델 로드
-huggingface-hub>=0.23.0             # 모델 다운로드 (snapshot_download)
-transformers>=4.40.0                # 모델 토크나이저
-
-# [4] 벡터DB 및 RAG (ChromaDB)
-chromadb>=0.5.0                     # 벡터 저장소
-langchain-core>=0.2.0               # Document, BaseModel
-langchain-text-splitters>=0.2.0     # RecursiveCharacterTextSplitter
-langchain-community>=0.2.0          # 향후 문서 로더 확장용
-
-# [5] YouTube 자막 추출
-youtube-transcript-api>=0.6.2       # YouTube 자막 API
-
-# [6] LLM 추론 (Groq/Hugging Face 라우터)
-openai>=1.30.0                      # OpenAI API 호환 인터페이스
-
-# [7] 유틸리티 (데이터 처리, 날짜, 정규식)
-python-dateutil>=2.8.2              # 날짜 처리
-requests>=2.31.0                    # HTTP 요청
-
-# [8] 선택사항: 개발 및 테스트
-pytest>=7.0.0                       # 테스트 프레임워크 (선택)
-pytest-asyncio>=0.21.0              # async 테스트 (선택)
-httpx>=0.24.0                       # FastAPI 테스트 클라이언트
-
-# ====================================================================
-# 설치 명령어:
-# pip install -r requirements.txt
-# 
-# 모델 다운로드:
-# python download_model.py
-# ====================================================================
+numpy>=1.26.0
