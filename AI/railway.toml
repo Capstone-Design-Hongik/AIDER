@@ -4,6 +4,6 @@ builder = "NIXPACKS"
 [deploy]
 startCommand = "uvicorn main_server:app --host 0.0.0.0 --port $PORT"
 healthcheckPath = "/health"
-healthcheckTimeout = 300    # 임베딩 모델 첫 다운로드 시간 고려
+healthcheckTimeout = 600    # bge-m3 첫 다운로드(~570MB) 시간 고려
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3

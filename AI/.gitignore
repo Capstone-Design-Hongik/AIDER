@@ -6,3 +6,5 @@ local_model
 chroma_db/
 *.pyc
 terminal_code.txt
+cookies.txt
+models/
