@@ -3,18 +3,12 @@ import os
 import sys
 from dotenv import load_dotenv
 
-import json as json_lib
 import uvicorn
 from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 
 from models import UserData, Trade, StockPrice
-from agent import AgentManager
-from chromadb_manager import ChromaDBManager
-from download_embedding_model import EmbeddingModelManager
-from add_pdf import PDFManager
 from config import VECTOR_DB_PATH
-from tools import _extract_json
 
 load_dotenv()
 
@@ -85,17 +79,7 @@ def _bg_save_transcript(vector_db, transcript_result, user_data):
         traceback.print_exc(file=sys.stderr)
 
 
-# ── 필수 환경변수 체크 ─────────────────────────────────────
-print("\n[1] 환경변수 확인 중...", file=sys.stderr)
-_REQUIRED_ENVS = ["OPENAI_API_KEY"]
-_missing = [k for k in _REQUIRED_ENVS if not os.getenv(k)]
-if _missing:
-    print(f"❌ 필수 환경변수 누락: {', '.join(_missing)}", file=sys.stderr)
-    raise EnvironmentError(f"필수 환경변수 누락: {', '.join(_missing)}")
-print("✅ 환경변수 확인 완료", file=sys.stderr)
-
 # ── FastAPI 앱 ─────────────────────────────────────────────
-print("\n[2] FastAPI 앱 생성 중...", file=sys.stderr)
 app = FastAPI(
     title="Agentic RAG Investment Advisor",
     description="단일 종목 YouTube 기반 AI 투자 조언 시스템",
@@ -109,27 +93,37 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-print("✅ FastAPI 앱 생성 완료", file=sys.stderr)
 
-# 전역 싱글톤
-vector_db:     ChromaDBManager | None = None
-agent_manager: AgentManager    | None = None
-pdf_manager:   PDFManager      | None = None
-is_ready:      bool            = False
+# 전역 싱글톤 — 타입은 런타임에 결정 (lazy import)
+vector_db     = None
+agent_manager = None
+pdf_manager   = None
+is_ready      = False
 
 
 async def _init_in_background():
     global vector_db, agent_manager, pdf_manager, is_ready
+
+    # 무거운 import는 여기서만 실행 — uvicorn 포트 바인딩 이후에 로드됨
+    from chromadb_manager import ChromaDBManager
+    from download_embedding_model import EmbeddingModelManager
+    from agent import AgentManager
+    from add_pdf import PDFManager
+
     print("\n" + "=" * 60, file=sys.stderr)
     print("🚀 FastAPI 서버 초기화 시작 (백그라운드)", file=sys.stderr)
     print("=" * 60, file=sys.stderr)
+
+    _missing = [k for k in ["OPENAI_API_KEY"] if not os.getenv(k)]
+    if _missing:
+        print(f"❌ 필수 환경변수 누락: {', '.join(_missing)}", file=sys.stderr)
+        return
 
     db_path = os.getenv("VECTOR_DB_PATH", VECTOR_DB_PATH)
     print(f"\n[초기화-1] DB 경로: {db_path}", file=sys.stderr)
 
     try:
         print("\n[초기화-2] 📥 임베딩 모델 로드 중...", file=sys.stderr)
-        print("  (torch 로딩으로 처음엔 30~60초 소요)", file=sys.stderr)
         loop = asyncio.get_event_loop()
         embedding_model = await loop.run_in_executor(None, EmbeddingModelManager.download_model)
         print("  ✅ 임베딩 모델 로드 완료", file=sys.stderr)
@@ -214,6 +208,7 @@ async def analyze(data: dict, background_tasks: BackgroundTasks):
         print(f"  ✅ Agent 완료 (반복: {len(result.agent_decisions)}회)", file=sys.stderr)
 
         # 3. 응답 JSON 구성 — final_advice는 {"evaluation":..,"advice":..} JSON 문자열
+        from tools import _extract_json
         try:
             advice_data = _extract_json(result.final_advice)
             evaluation  = advice_data.get("evaluation", result.final_advice)
