@@ -101,14 +101,17 @@ pdf_manager   = None
 is_ready      = False
 
 
-async def _init_in_background():
-    global vector_db, agent_manager, pdf_manager, is_ready
-
-    # 무거운 import는 여기서만 실행 — uvicorn 포트 바인딩 이후에 로드됨
+def _do_heavy_imports():
+    """이벤트 루프 블로킹 방지 — 스레드 풀에서 무거운 import 실행"""
     from chromadb_manager import ChromaDBManager
     from download_embedding_model import EmbeddingModelManager
     from agent import AgentManager
     from add_pdf import PDFManager
+    return ChromaDBManager, EmbeddingModelManager, AgentManager, PDFManager
+
+
+async def _init_in_background():
+    global vector_db, agent_manager, pdf_manager, is_ready
 
     print("\n" + "=" * 60, file=sys.stderr)
     print("🚀 FastAPI 서버 초기화 시작 (백그라운드)", file=sys.stderr)
@@ -123,20 +126,26 @@ async def _init_in_background():
     print(f"\n[초기화-1] DB 경로: {db_path}", file=sys.stderr)
 
     try:
-        print("\n[초기화-2] 📥 임베딩 모델 로드 중...", file=sys.stderr)
         loop = asyncio.get_running_loop()
+
+        print("\n[초기화-2] 📦 무거운 패키지 로드 중...", file=sys.stderr)
+        ChromaDBManager, EmbeddingModelManager, AgentManager, PDFManager = \
+            await loop.run_in_executor(None, _do_heavy_imports)
+        print("  ✅ 패키지 로드 완료", file=sys.stderr)
+
+        print("\n[초기화-3] 📥 임베딩 모델 로드 중...", file=sys.stderr)
         embedding_model = await loop.run_in_executor(None, EmbeddingModelManager.download_model)
         print("  ✅ 임베딩 모델 로드 완료", file=sys.stderr)
 
-        print("\n[초기화-3] 🗄️  ChromaDB 초기화 중...", file=sys.stderr)
+        print("\n[초기화-4] 🗄️  ChromaDB 초기화 중...", file=sys.stderr)
         vector_db = ChromaDBManager(db_path=db_path, embedding_model=embedding_model)
         print("  ✅ ChromaDB 초기화 완료", file=sys.stderr)
 
-        print("\n[초기화-4] 🤖 Agent Manager 생성 중...", file=sys.stderr)
+        print("\n[초기화-5] 🤖 Agent Manager 생성 중...", file=sys.stderr)
         agent_manager = AgentManager(vector_db)
         print("  ✅ Agent Manager 생성 완료", file=sys.stderr)
 
-        print("\n[초기화-5] 📄 PDF Manager 생성 중...", file=sys.stderr)
+        print("\n[초기화-6] 📄 PDF Manager 생성 중...", file=sys.stderr)
         pdf_manager = PDFManager(vector_db)
         print("  ✅ PDF Manager 생성 완료", file=sys.stderr)
 
