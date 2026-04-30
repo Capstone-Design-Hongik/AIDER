@@ -149,6 +149,13 @@ async def _init_in_background():
         pdf_manager = PDFManager(vector_db)
         print("  ✅ PDF Manager 생성 완료", file=sys.stderr)
 
+        print("\n[초기화-7] 🌱 전략 지식 시드 확인...", file=sys.stderr)
+        if vector_db.count_documents() == 0:
+            count = pdf_manager.seed_strategy_knowledge()
+            print(f"  ✅ 전략 지식 {count}개 문서 자동 적재 완료", file=sys.stderr)
+        else:
+            print(f"  ⏭️  DB에 문서 있음 ({vector_db.count_documents()}개) → 시드 생략", file=sys.stderr)
+
         is_ready = True
         print("\n" + "=" * 60, file=sys.stderr)
         print("✅ 서버 준비 완료!", file=sys.stderr)
