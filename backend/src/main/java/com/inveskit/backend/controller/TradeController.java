@@ -60,6 +60,15 @@ public class TradeController {
         return ResponseEntity.ok("거래 내역이 삭제되었습니다.");
     }
 
+    // 전체 거래 삭제
+    // DELETE /api/trades
+    @DeleteMapping
+    public ResponseEntity<String> deleteAllTrades() {
+        log.info("Deleting all trades");
+        tradeService.deleteAllTrades();
+        return ResponseEntity.ok("전체 거래 내역이 삭제되었습니다.");
+    }
+
     // 전체 거래 개수
     // GET /api/trades/count
     @GetMapping("/count")

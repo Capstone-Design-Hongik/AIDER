@@ -19,6 +19,7 @@ const StockTradingAnalyzer = () => {
 
   const [strategy, setStrategy] = useState('bollinger');
   const [externalUrl, setExternalUrl] = useState('');
+  const [selectedStock, setSelectedStock] = useState('');
   const [analysis, setAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
   const [savedStrategies, setSavedStrategies] = useState([]);
@@ -135,6 +136,16 @@ React.useEffect(() => {
   fetchCurrentPrices();
 }, [currentPage, trades]);
 
+  // 거래 목록 변경 시 종목 자동 선택 (단일 종목이면 바로 선택)
+  React.useEffect(() => {
+    const unique = [...new Set(trades.map(t => t.stockName))];
+    if (unique.length === 1) {
+      setSelectedStock(unique[0]);
+    } else if (!unique.includes(selectedStock)) {
+      setSelectedStock('');
+    }
+  }, [trades]);
+
   const handleStockNameChange = async (value) => {
   setCurrentTrade({...currentTrade, stockName: value});
   
@@ -198,6 +209,17 @@ React.useEffect(() => {
   }
 };
 
+  const removeAllTrades = async () => {
+  if (!window.confirm('전체 거래 내역을 삭제하시겠습니까?')) return;
+  try {
+    await stockApi.deleteAllTrades();
+    setTrades([]);
+  } catch (error) {
+    console.error('전체 거래 삭제 실패:', error);
+    alert('전체 거래 삭제에 실패했습니다.');
+  }
+};
+
   const analyzeTrading = async () => {
   if (trades.length === 0) {
     alert('거래 내역을 먼저 입력해주세요.');
@@ -209,10 +231,15 @@ React.useEffect(() => {
     return;
   }
 
+  if (!selectedStock) {
+    alert('분석할 종목을 선택해주세요.');
+    return;
+  }
+
   setLoading(true);
-  
+
   try {
-    const response = await stockApi.analyzeTrading(strategy, externalUrl);
+    const response = await stockApi.analyzeTrading(strategy, externalUrl, selectedStock);
     
     setAnalysis(response);
     setCurrentPage('analysis');
@@ -383,6 +410,28 @@ React.useEffect(() => {
               <BarChart3 className="w-5 h-5" />
               분석 전략 선택
             </h2>
+
+            {/* 종목 선택 (복수 종목인 경우에만 표시) */}
+            {[...new Set(trades.map(t => t.stockName))].length > 1 && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <label className="block text-sm font-medium text-blue-900 mb-2">
+                  분석할 종목 선택
+                </label>
+                <select
+                  value={selectedStock}
+                  onChange={(e) => setSelectedStock(e.target.value)}
+                  className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-900"
+                >
+                  <option value="">종목을 선택하세요</option>
+                  {[...new Set(trades.map(t => t.stockName))].map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-blue-700 mt-1.5">
+                  AI는 선택한 종목의 거래 내역만 분석합니다
+                </p>
+              </div>
+            )}
             
             <div className="space-y-3">
               <label className="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-gray-300 transition-colors">
@@ -458,7 +507,7 @@ React.useEffect(() => {
 
             <button
               onClick={analyzeTrading}
-              disabled={trades.length === 0 || loading || (strategy === 'external' && !externalUrl)}
+              disabled={trades.length === 0 || loading || (strategy === 'external' && !externalUrl) || !selectedStock}
               className="w-full mt-4 bg-emerald-600 text-white py-2.5 rounded-lg font-medium hover:bg-emerald-700 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
             >
               {loading ? '분석 중...' : 'AI 분석 시작'}
@@ -468,8 +517,19 @@ React.useEffect(() => {
 
         <div className="space-y-6">
           <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">입력된 거래 내역</h2>
-            
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">입력된 거래 내역</h2>
+              {trades.length > 0 && (
+                <button
+                  onClick={removeAllTrades}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  전체 삭제
+                </button>
+              )}
+            </div>
+
             {trades.length === 0 ? (
               <div className="text-center py-12 text-gray-400">
                 <AlertCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
@@ -482,7 +542,7 @@ React.useEffect(() => {
                     <div className="flex-1">
                       <div className="font-medium text-gray-900">{trade.stockName}</div>
                       <div className="text-sm text-gray-500">
-                        {trade.date} | {trade.tradeType === 'buy' ? '매수' : '매도'} | 
+                        {trade.date} | {trade.tradeType === 'buy' ? '매수' : '매도'} |
                         {parseInt(trade.price).toLocaleString()}원 × {trade.quantity}주
                       </div>
                     </div>
