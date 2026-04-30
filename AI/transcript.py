@@ -1,27 +1,21 @@
+import os
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api.proxies import WebshareProxyConfig, GenericProxyConfig
+from youtube_transcript_api.proxies import GenericProxyConfig
+from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
 from typing import List, Dict, Optional
 import traceback
-from config import YOUTUBE_PROXY_HOST, YOUTUBE_PROXY_PORT, YOUTUBE_PROXY_USER, YOUTUBE_PROXY_PASS
 
 
 def _make_api(use_proxy: bool) -> YouTubeTranscriptApi:
-    """proxy 적용 또는 직접 연결 API 인스턴스 반환 (v1.x 전용)"""
-    if use_proxy and YOUTUBE_PROXY_USER and YOUTUBE_PROXY_PASS:
-        if YOUTUBE_PROXY_HOST == "p.webshare.io":
-            proxy_config = WebshareProxyConfig(
-                proxy_username=YOUTUBE_PROXY_USER,
-                proxy_password=YOUTUBE_PROXY_PASS,
-            )
-            print(f"[Transcript] Webshare 프록시 사용")
-        else:
-            url = f"http://{YOUTUBE_PROXY_USER}:{YOUTUBE_PROXY_PASS}@{YOUTUBE_PROXY_HOST}:{YOUTUBE_PROXY_PORT}"
-            proxy_config = GenericProxyConfig(http_url=url, https_url=url)
-            print(f"[Transcript] Generic 프록시 사용: {YOUTUBE_PROXY_HOST}:{YOUTUBE_PROXY_PORT}")
-        return YouTubeTranscriptApi(proxy_config=proxy_config)
-
-    if use_proxy:
-        print("[Transcript] ⚠️  프록시 자격증명 없음 → 직접 연결로 대체")
+    """proxy 적용 또는 직접 연결 API 인스턴스 반환"""
+    proxy_url = os.environ.get("HTTPS_PROXY")
+    if use_proxy and proxy_url:
+        print(f"[Transcript] 프록시 사용: {proxy_url.split('@')[-1]}")
+        return YouTubeTranscriptApi(
+            proxy_config=GenericProxyConfig(https_url=proxy_url)
+        )
+    if use_proxy and not proxy_url:
+        print("[Transcript] ⚠️  HTTPS_PROXY 미설정 → 직접 연결로 대체")
     return YouTubeTranscriptApi()
 
 
@@ -46,12 +40,7 @@ class TranscriptManager:
     def transcript(video_id: str) -> Optional[str]:
         """
         YouTube 자막을 텍스트로 반환.
-
-        우선순위:
-        1. proxy + 공식 자막 (ko/en)
-        2. proxy + 자동생성 자막
-        3. 직접 연결 + 공식 자막
-        4. 직접 연결 + 자동생성 자막
+        proxy 실패 시 직접 연결로 fallback.
         """
         if not video_id:
             return None
@@ -62,27 +51,18 @@ class TranscriptManager:
             try:
                 print(f"[Transcript] 시도 {attempt + 1}: {label}")
                 api = _make_api(use_proxy)
-                transcript_list = api.list(video_id)
-
-                try:
-                    for t in transcript_list:
-                        lang = getattr(t, "language", "unknown")
-                        code = getattr(t, "language_code", "unknown")
-                        print(f"  - {code} ({lang})")
-                except Exception:
-                    pass
-
-                try:
-                    selected = transcript_list.find_transcript(["ko", "en"])
-                    print(f"[Transcript] 공식 자막 선택: {getattr(selected, 'language_code', '?')}")
-                except Exception:
-                    print("[Transcript] 공식 자막 없음 → 자동생성 자막 시도")
-                    selected = transcript_list.find_generated_transcript(["ko", "en"])
-                    print(f"[Transcript] 자동생성 자막 선택: {getattr(selected, 'language_code', '?')}")
-
-                full_text = " ".join(snippet.text for snippet in selected.fetch()).strip()
+                result = api.fetch(video_id, languages=["ko", "en"])
+                full_text = " ".join(s.text for s in result).strip()
                 print(f"[Transcript] ✅ 완료 ({label}): {len(full_text):,}자")
                 return full_text
+
+            except (TranscriptsDisabled, NoTranscriptFound) as e:
+                print(f"[Transcript] 자막 없음: {e}")
+                return None
+
+            except VideoUnavailable as e:
+                print(f"[Transcript] 영상 없음: {e}")
+                return None
 
             except Exception as e:
                 print(f"[Transcript] {label} 실패: {e}")
@@ -102,23 +82,13 @@ class TranscriptManager:
 
         try:
             api = _make_api(use_proxy=True)
-            transcript_list = api.list(video_id)
-
-            try:
-                selected = transcript_list.find_transcript(languages)
-            except Exception:
-                selected = transcript_list.find_generated_transcript(languages)
-
-            result = []
-            for snippet in selected.fetch():
-                result.append({
-                    "text":     snippet.text,
-                    "start":    snippet.start,
-                    "duration": snippet.duration,
-                })
-
-            print(f"[Transcript] ✅ {len(result)}개 항목 추출")
-            return result
+            result = api.fetch(video_id, languages=languages)
+            snippets = [
+                {"text": s.text, "start": s.start, "duration": s.duration}
+                for s in result
+            ]
+            print(f"[Transcript] ✅ {len(snippets)}개 항목 추출")
+            return snippets
 
         except Exception as e:
             print(f"❌ 타임스탬프 자막 추출 실패: {e}")
@@ -133,12 +103,10 @@ class TranscriptManager:
     ) -> List[str]:
         """자막을 청크로 분할"""
         chunks = []
-        start  = 0
-
+        start = 0
         while start < len(transcript):
             end = min(start + chunk_size, len(transcript))
             chunks.append(transcript[start:end])
             start = end - chunk_overlap
-
         print(f"[Transcript] 청킹 완료: {len(chunks)}개 청크")
         return chunks

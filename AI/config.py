@@ -4,7 +4,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # API Keys
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")   # 더 이상 사용 안 함 (보존만)
 OPENAI_API_KEY    = os.getenv("OPENAI_API_KEY")
 
 
@@ -41,8 +40,6 @@ RAG_K_MAX                  = 10
 SEARCH_SCORE_THRESHOLD     = 0.5
 SEARCH_CONFIDENCE_THRESHOLD = 0.70
 
-# YouTube Proxy (Webshare rotating proxy) — 값은 Railway Variables에서 주입
-YOUTUBE_PROXY_HOST = os.getenv("YOUTUBE_PROXY_HOST", "p.webshare.io")
-YOUTUBE_PROXY_PORT = os.getenv("YOUTUBE_PROXY_PORT", "80")
-YOUTUBE_PROXY_USER = os.getenv("YOUTUBE_PROXY_USER")
-YOUTUBE_PROXY_PASS = os.getenv("YOUTUBE_PROXY_PASS")
+# YouTube Proxy — HTTPS_PROXY 단일 환경변수
+# 형식: http://user:pass@host:port
+# Railway Variables 또는 .env 파일에 설정
