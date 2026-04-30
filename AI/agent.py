@@ -59,6 +59,11 @@ class AgentManager:
             strategy_task,
         )
 
+        if state["user_analysis"] is None:
+            raise ValueError("사용자 분석 실패")
+        if state["transcript_analysis"] is None:
+            raise ValueError("전략 분석 실패")
+
         # ── Step 2: Agent 의사결정 루프 ───────────────────────
         print("\n" + "─" * 70)
         print("Step 2️⃣  Agent 의사결정 루프 (최대 5회)")
@@ -109,6 +114,9 @@ class AgentManager:
                 break
 
             print(f"└─")
+
+        if not state["search_results"]:
+            raise ValueError("벡터 검색 결과 없음")
 
         # ── Step 3+4: total_score 산정 + 최종 조언 생성 (병렬) ──
         print("\n" + "─" * 70)
