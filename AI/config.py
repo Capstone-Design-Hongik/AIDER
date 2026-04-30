@@ -40,3 +40,9 @@ RAG_K_DEFAULT              = 5
 RAG_K_MAX                  = 10
 SEARCH_SCORE_THRESHOLD     = 0.5
 SEARCH_CONFIDENCE_THRESHOLD = 0.70
+
+# YouTube Proxy (Webshare rotating proxy) — 값은 Railway Variables에서 주입
+YOUTUBE_PROXY_HOST = os.getenv("YOUTUBE_PROXY_HOST", "p.webshare.io")
+YOUTUBE_PROXY_PORT = os.getenv("YOUTUBE_PROXY_PORT", "80")
+YOUTUBE_PROXY_USER = os.getenv("YOUTUBE_PROXY_USER")
+YOUTUBE_PROXY_PASS = os.getenv("YOUTUBE_PROXY_PASS")

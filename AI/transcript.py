@@ -1,6 +1,23 @@
 from youtube_transcript_api import YouTubeTranscriptApi
 from typing import List, Dict, Optional
 import traceback
+from config import YOUTUBE_PROXY_HOST, YOUTUBE_PROXY_PORT, YOUTUBE_PROXY_USER, YOUTUBE_PROXY_PASS
+
+
+def _build_proxies():
+    """Webshare rotating proxy URL 생성. 설정 없으면 None 반환."""
+    if not YOUTUBE_PROXY_USER or not YOUTUBE_PROXY_PASS:
+        return None
+    url = f"http://{YOUTUBE_PROXY_USER}:{YOUTUBE_PROXY_PASS}@{YOUTUBE_PROXY_HOST}:{YOUTUBE_PROXY_PORT}"
+    return {"http": url, "https": url}
+
+
+def _make_api() -> YouTubeTranscriptApi:
+    """proxy 적용된 API 인스턴스 생성. proxy 없으면 직접 연결."""
+    proxies = _build_proxies()
+    if proxies:
+        return YouTubeTranscriptApi(proxies=proxies)
+    return YouTubeTranscriptApi()
 
 
 class TranscriptManager:
@@ -34,43 +51,39 @@ class TranscriptManager:
 
         print(f"\n[Transcript] 자막 추출 시도: {video_id}")
 
-        try:
-            # ✅ 이미지 코드 기반 — 인스턴스 생성 후 .list() 호출
-            api = YouTubeTranscriptApi()
-            transcript_list = api.list(video_id)
-
-            # 사용 가능한 자막 출력
-            print("[Transcript] 사용 가능한 자막:")
+        for attempt, use_proxy in enumerate([(True, "proxy"), (False, "직접 연결")]):
             try:
-                for t in transcript_list:
-                    lang = getattr(t, "language", "unknown")
-                    code = getattr(t, "language_code", "unknown")
-                    print(f"  - {code} ({lang})")
-            except Exception:
-                pass
+                use_p, label = use_proxy
+                print(f"[Transcript] 시도 {attempt + 1}: {label}")
+                api = _make_api() if use_p else YouTubeTranscriptApi()
+                transcript_list = api.list(video_id)
 
-            # 공식 자막 우선, 없으면 자동생성
-            try:
-                selected = transcript_list.find_transcript(["ko", "en"])
-                print(f"[Transcript] 공식 자막 선택: {getattr(selected, 'language_code', '?')}")
-            except Exception:
-                print("[Transcript] 공식 자막 없음 → 자동생성 자막 시도")
-                selected = transcript_list.find_generated_transcript(["ko", "en"])
-                print(f"[Transcript] 자동생성 자막 선택: {getattr(selected, 'language_code', '?')}")
+                try:
+                    for t in transcript_list:
+                        lang = getattr(t, "language", "unknown")
+                        code = getattr(t, "language_code", "unknown")
+                        print(f"  - {code} ({lang})")
+                except Exception:
+                    pass
 
-            # ✅ 이미지 코드 기반 — snippet.text 로 접근
-            full_text = ""
-            for snippet in selected.fetch():
-                full_text += snippet.text + " "
+                try:
+                    selected = transcript_list.find_transcript(["ko", "en"])
+                    print(f"[Transcript] 공식 자막 선택: {getattr(selected, 'language_code', '?')}")
+                except Exception:
+                    print("[Transcript] 공식 자막 없음 → 자동생성 자막 시도")
+                    selected = transcript_list.find_generated_transcript(["ko", "en"])
+                    print(f"[Transcript] 자동생성 자막 선택: {getattr(selected, 'language_code', '?')}")
 
-            full_text = full_text.strip()
-            print(f"[Transcript] ✅ 완료: {len(full_text):,}자")
-            return full_text
+                full_text = " ".join(snippet.text for snippet in selected.fetch()).strip()
+                print(f"[Transcript] ✅ 완료 ({label}): {len(full_text):,}자")
+                return full_text
 
-        except Exception as e:
-            print(f"[Transcript] 자막 추출 실패: {e}")
-            traceback.print_exc()
-            return None
+            except Exception as e:
+                print(f"[Transcript] {label} 실패: {e}")
+                if attempt == 1:
+                    traceback.print_exc()
+
+        return None
 
     @staticmethod
     def get_transcript_with_timestamps(
@@ -82,7 +95,7 @@ class TranscriptManager:
             return []
 
         try:
-            api = YouTubeTranscriptApi()
+            api = _make_api()
             transcript_list = api.list(video_id)
 
             try:
