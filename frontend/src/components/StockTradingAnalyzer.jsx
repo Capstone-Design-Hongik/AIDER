@@ -1389,7 +1389,7 @@ React.useEffect(() => {
                             <td className="px-4 py-3 font-medium text-gray-900">{item.stockName}</td>
                             <td className="px-4 py-3 text-gray-500">{item.analysisDate}</td>
                             <td className="px-4 py-3">
-                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${signalColor[item.signal] || 'bg-gray-100 text-gray-700'}`}>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${signalColor[item.signal] || 'bg-gray-100 text-gray-700'}`}>
                                 {signalLabel[item.signal] || item.signal}
                               </span>
                             </td>
@@ -1463,11 +1463,11 @@ React.useEffect(() => {
                       </RechartsPie>
                     </ResponsiveContainer>
                     <div className="flex gap-4 mt-2 text-xs text-gray-600">
-                      <span className="flex items-center gap-1">
-                        <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />적중
+                      <span className="flex items-center gap-1 whitespace-nowrap">
+                        <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block flex-shrink-0" />적중
                       </span>
-                      <span className="flex items-center gap-1">
-                        <span className="w-3 h-3 rounded-full bg-red-400 inline-block" />미적중
+                      <span className="flex items-center gap-1 whitespace-nowrap">
+                        <span className="w-3 h-3 rounded-full bg-red-400 inline-block flex-shrink-0" />미적중
                       </span>
                     </div>
                   </>
