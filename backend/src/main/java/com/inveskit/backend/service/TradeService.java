@@ -73,6 +73,13 @@ public class TradeService {
         tradeRepository.deleteById(id);
     }
 
+    // 전체 거래 삭제
+    @Transactional
+    public void deleteAllTrades() {
+        log.info("Deleting all trades");
+        tradeRepository.deleteAll();
+    }
+
     // 전체 거래 개수
     @Transactional(readOnly = true)
     public long getTradeCount() {

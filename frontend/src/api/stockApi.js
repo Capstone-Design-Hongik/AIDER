@@ -125,6 +125,17 @@ const stockApi = {
     }
   },
 
+  // 전체 거래 삭제
+  deleteAllTrades: async () => {
+    try {
+      const response = await axios.delete(`${API_BASE_URL}/trades`);
+      return response.data;
+    } catch (error) {
+      console.error('전체 거래 삭제 실패:', error);
+      throw error;
+    }
+  },
+
   // 거래 개수
   getTradeCount: async () => {
     try {
@@ -138,11 +149,12 @@ const stockApi = {
 
   // ========== Analysis API ==========
   // AI 분석 요청
-  analyzeTrading: async (strategy, externalUrl = null) => {
+  analyzeTrading: async (strategy, externalUrl = null, stockName = null) => {
     try {
       const response = await axios.post(`${API_BASE_URL}/analysis`, {
         strategy,
-        externalUrl
+        externalUrl,
+        stockName
       });
       return response.data;
     } catch (error) {

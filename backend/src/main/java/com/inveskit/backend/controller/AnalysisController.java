@@ -41,14 +41,25 @@ public class AnalysisController {
                 requestDto.getExternalUrl());
 
         try {
-            // 1. 모든 거래 내역 조회
-            List<TradeResponse> trades = tradeService.getAllTrades();
-            if (trades.isEmpty()) {
+            // 1. 거래 내역 조회 (선택 종목으로 필터링)
+            List<TradeResponse> allTrades = tradeService.getAllTrades();
+            if (allTrades.isEmpty()) {
                 throw new IllegalArgumentException("거래 내역이 없습니다.");
             }
 
-            // 2. 첫 번째 종목명으로 주가 데이터 조회 (60일)
-            String stockName = trades.get(0).getStockName();
+            String stockName = (requestDto.getStockName() != null && !requestDto.getStockName().isBlank())
+                    ? requestDto.getStockName()
+                    : allTrades.get(0).getStockName();
+
+            List<TradeResponse> trades = allTrades.stream()
+                    .filter(t -> t.getStockName().equals(stockName))
+                    .collect(Collectors.toList());
+
+            if (trades.isEmpty()) {
+                throw new IllegalArgumentException("선택한 종목의 거래 내역이 없습니다: " + stockName);
+            }
+
+            // 2. 선택 종목 주가 데이터 조회 (60일)
             LocalDate latestTradeDate = trades.stream()
                     .map(TradeResponse::getDate)
                     .max(LocalDate::compareTo)
@@ -140,5 +151,6 @@ public class AnalysisController {
     public static class AnalysisRequestDto {
         private String strategy;
         private String externalUrl;
+        private String stockName;
     }
 }
