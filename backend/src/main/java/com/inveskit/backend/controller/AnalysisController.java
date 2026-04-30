@@ -144,6 +144,12 @@ public class AnalysisController {
         return ResponseEntity.ok(analysisResultService.getPerformance());
     }
 
+    @DeleteMapping("/performance/{id}")
+    public ResponseEntity<String> deleteAnalysisResult(@PathVariable Long id) {
+        analysisResultService.delete(id);
+        return ResponseEntity.ok("분석 결과가 삭제되었습니다.");
+    }
+
     // 간단한 요청 DTO
     @lombok.Getter
     @lombok.Setter

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, BarChart3, Plus, Trash2, AlertCircle, FileText, Activity, User, PieChart, Download, Bookmark, Trophy } from 'lucide-react';
+import { TrendingUp, BarChart3, Plus, Trash2, AlertCircle, FileText, Activity, User, PieChart, Download, Bookmark, Trophy, Pencil, X } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceDot, PieChart as RechartsPie, Pie, Cell } from 'recharts';
 import stockApi from '../api/stockApi';
 
@@ -26,6 +26,8 @@ const StockTradingAnalyzer = () => {
   const [savedStrategies, setSavedStrategies] = useState([]);
   const [strategySaveMsg, setStrategySaveMsg] = useState('');
 
+  const [editingTradeId, setEditingTradeId] = useState(null);
+  const [chartSelectedStock, setChartSelectedStock] = useState('');
   const [stockData, setStockData] = useState(null);
   const [chartLoading, setChartLoading] = useState(false);
   const [chartError, setChartError] = useState(null);
@@ -60,28 +62,47 @@ React.useEffect(() => {
   loadTrades();
 }, []);
 
+// 차트 페이지 진입 시 기본 종목 설정
+React.useEffect(() => {
+  if (currentPage === 'chart' && trades.length > 0) {
+    const unique = [...new Set(trades.map(t => t.stockName))];
+    if (!unique.includes(chartSelectedStock)) {
+      setChartSelectedStock(unique[0]);
+    }
+  }
+}, [currentPage, trades, chartSelectedStock]);
+
 // 2. 차트 페이지에서 주가 데이터 불러오기
 React.useEffect(() => {
   const fetchData = async () => {
-    if (currentPage === 'chart' && trades.length > 0) {
-      const stockName = trades[0].stockName;
+    if (currentPage === 'chart' && chartSelectedStock) {
       setChartLoading(true);
       setChartError(null);
-      
+      setStockData(null);
+
       try {
-        const latestTradeDate = trades
+        const stockTrades = trades.filter(t => t.stockName === chartSelectedStock);
+        const latestTradeDate = stockTrades
           .map(t => t.date)
           .sort()
           .reverse()[0];
-        
-        const response = await stockApi.getStockPrices(stockName, latestTradeDate);
-        
+
+        const response = await stockApi.getStockPrices(chartSelectedStock, latestTradeDate);
+
+        const tradesByDate = {};
+        stockTrades.forEach(t => {
+          const d = typeof t.date === 'string' ? t.date : String(t.date);
+          if (!tradesByDate[d]) tradesByDate[d] = [];
+          tradesByDate[d].push(t);
+        });
+
         const formattedData = response.prices.map(p => ({
           date: new Date(p.date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }),
           fullDate: p.date,
-          close: p.closePrice
+          close: p.closePrice,
+          trades: tradesByDate[p.date] || [],
         }));
-        
+
         setStockData(formattedData);
       } catch (err) {
         console.error('주가 데이터 로딩 실패:', err);
@@ -91,9 +112,9 @@ React.useEffect(() => {
       }
     }
   };
-  
+
   fetchData();
-}, [currentPage, trades]);
+}, [currentPage, chartSelectedStock, trades]);
 
 // 3. 마이페이지 진입 시 보유 종목 현재 주가 조회
 React.useEffect(() => {
@@ -173,8 +194,26 @@ React.useEffect(() => {
   };
 
 
+  const resetTradeForm = () => {
+    setCurrentTrade({ stockName: '', tradeType: 'buy', date: '', price: '', quantity: '' });
+    setEditingTradeId(null);
+  };
+
   const addTrade = async () => {
-  if (currentTrade.stockName && currentTrade.date && currentTrade.price && currentTrade.quantity) {
+    if (!currentTrade.stockName || !currentTrade.date || !currentTrade.price || !currentTrade.quantity) return;
+
+    if (editingTradeId) {
+      try {
+        const response = await stockApi.updateTrade(editingTradeId, currentTrade);
+        setTrades(trades.map(t => t.id === editingTradeId ? response : t));
+        resetTradeForm();
+      } catch (error) {
+        console.error('거래 수정 실패:', error);
+        alert('거래 수정에 실패했습니다.');
+      }
+      return;
+    }
+
     if (currentTrade.tradeType === 'sell') {
       const heldQty = trades
         .filter(t => t.stockName === currentTrade.stockName)
@@ -187,19 +226,12 @@ React.useEffect(() => {
     try {
       const response = await stockApi.createTrade(currentTrade);
       setTrades([...trades, response]);
-      setCurrentTrade({
-        stockName: '',
-        tradeType: 'buy',
-        date: '',
-        price: '',
-        quantity: ''
-      });
+      resetTradeForm();
     } catch (error) {
       console.error('거래 추가 실패:', error);
       alert('거래 추가에 실패했습니다.');
     }
-  }
-};
+  };
 
   const removeTrade = async (id) => {
   try {
@@ -322,9 +354,15 @@ React.useEffect(() => {
         <div className="space-y-6">
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Plus className="w-5 h-5" />
-              매매 기록 입력
+              {editingTradeId ? <Pencil className="w-5 h-5 text-blue-600" /> : <Plus className="w-5 h-5" />}
+              {editingTradeId ? '거래 수정' : '매매 기록 입력'}
             </h2>
+            {editingTradeId && (
+              <div className="mb-3 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700 flex items-center justify-between">
+                <span>수정 중입니다. 변경사항을 저장하거나 취소하세요.</span>
+                <button onClick={resetTradeForm} className="ml-2 text-blue-500 hover:text-blue-700"><X className="w-3.5 h-3.5" /></button>
+              </div>
+            )}
             
             <div className="space-y-4">
               <div>
@@ -404,13 +442,22 @@ React.useEffect(() => {
                 </div>
               </div>
 
-              <button
-                onClick={addTrade}
-                className="w-full bg-slate-900 text-white py-2.5 rounded-lg font-medium hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                거래 추가
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={addTrade}
+                  className="flex-1 bg-slate-900 text-white py-2.5 rounded-lg font-medium hover:bg-slate-800 transition-colors flex items-center justify-center gap-2"
+                >
+                  {editingTradeId ? <><Pencil className="w-4 h-4" />수정 저장</> : <><Plus className="w-4 h-4" />거래 추가</>}
+                </button>
+                {editingTradeId && (
+                  <button
+                    onClick={resetTradeForm}
+                    className="px-4 py-2.5 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors text-sm font-medium"
+                  >
+                    취소
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -561,12 +608,29 @@ React.useEffect(() => {
                         {parseInt(trade.price).toLocaleString()}원 × {trade.quantity}주
                       </div>
                     </div>
-                    <button
-                      onClick={() => removeTrade(trade.id)}
-                      className="text-red-500 hover:text-red-700 p-2"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => {
+                          setCurrentTrade({
+                            stockName: trade.stockName,
+                            tradeType: trade.tradeType,
+                            date: typeof trade.date === 'string' ? trade.date : String(trade.date),
+                            price: trade.price,
+                            quantity: trade.quantity,
+                          });
+                          setEditingTradeId(trade.id);
+                        }}
+                        className="text-blue-400 hover:text-blue-600 p-2"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => removeTrade(trade.id)}
+                        className="text-red-500 hover:text-red-700 p-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -577,104 +641,136 @@ React.useEffect(() => {
     </div>
   );
 
-  const renderChartPage = () => {
-  const stockName = trades.length > 0 ? trades[0].stockName : null;
-
-  return (
-    <div className="max-w-6xl mx-auto">
-      <div className="bg-white rounded-lg border border-gray-200 p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-6">
-          {stockName || '종목'} 60일 주가 차트
-        </h2>
-        
-        {trades.length === 0 ? (
-          <div className="text-center py-16 text-gray-400">
-            <AlertCircle className="w-16 h-16 mx-auto mb-4 opacity-50" />
-            <p className="text-base">거래 내역을 먼저 입력해주세요</p>
-          </div>
-        ) : chartLoading ? (
-          <div className="text-center py-16">
-            <div className="text-gray-500">차트 로딩 중...</div>
-          </div>
-        ) : chartError ? (
-          <div className="text-center py-16 text-red-500">
-            <AlertCircle className="w-16 h-16 mx-auto mb-4" />
-            <p className="text-base">{chartError}</p>
-          </div>
-        ) : stockData ? (
-          <>
-            <ResponsiveContainer width="100%" height={400}>
-              <LineChart data={stockData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis 
-                  dataKey="date" 
-                  tick={{ fontSize: 12, fill: '#6b7280' }}
-                />
-                <YAxis 
-                  domain={['auto', 'auto']}
-                  tick={{ fontSize: 12, fill: '#6b7280' }}
-                  tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: '#fff', 
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '8px',
-                    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                  }}
-                  formatter={(value) => [`${Number(value).toLocaleString()}원`, '종가']}
-                />
-                <Legend />
-                <Line 
-                  type="monotone" 
-                  dataKey="close" 
-                  stroke="#0f172a" 
-                  strokeWidth={2}
-                  name="종가"
-                  dot={false}
-                />
-                {trades.map((trade) => {
-                  const matchingData = stockData.find(d => d.fullDate === trade.date);
-                  if (matchingData) {
-                    return (
-                      <ReferenceDot
-                        key={trade.id}
-                        x={matchingData.date}
-                        y={parseFloat(trade.price)}
-                        r={7}
-                        fill={trade.tradeType === 'buy' ? '#10b981' : '#ef4444'}
-                        stroke="#fff"
-                        strokeWidth={2}
-                      />
-                    );
-                  }
-                  return null;
-                })}
-              </LineChart>
-            </ResponsiveContainer>
-            
-            <div className="flex gap-6 mt-6 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
-                <span className="text-gray-600">매수</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                <span className="text-gray-600">매도</span>
-              </div>
-            </div>
-            
-            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-              <p className="text-sm text-blue-800">
-                ✅ 실제 주가 데이터가 표시되고 있습니다! (Yahoo Finance API)
+  const ChartTooltip = ({ active, payload }) => {
+    if (!active || !payload?.length) return null;
+    const d = payload[0].payload;
+    return (
+      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm min-w-[160px]">
+        <p className="font-medium text-gray-700 mb-1">{d.date}</p>
+        <p className="text-gray-600">종가: {Number(d.close).toLocaleString()}원</p>
+        {d.trades?.length > 0 && (
+          <div className="mt-2 border-t border-gray-100 pt-2 space-y-1">
+            {d.trades.map((t, i) => (
+              <p key={i} className={t.tradeType === 'buy' ? 'text-emerald-600 font-medium' : 'text-red-600 font-medium'}>
+                {t.tradeType === 'buy' ? '▲ 매수' : '▼ 매도'} {Number(t.price).toLocaleString()}원 × {t.quantity}주
               </p>
-            </div>
-          </>
-        ) : null}
+            ))}
+          </div>
+        )}
       </div>
-    </div>
-  );
-};
+    );
+  };
+
+  const renderChartPage = () => {
+    const uniqueStocks = [...new Set(trades.map(t => t.stockName))];
+    const activeStock = chartSelectedStock || uniqueStocks[0] || null;
+    const stockTrades = trades.filter(t => t.stockName === activeStock);
+
+    return (
+      <div className="max-w-6xl mx-auto">
+        <div className="bg-white rounded-lg border border-gray-200 p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">
+            60일 주가 차트
+          </h2>
+
+          {uniqueStocks.length > 1 && (
+            <div className="flex gap-2 mb-6 flex-wrap">
+              {uniqueStocks.map(name => (
+                <button
+                  key={name}
+                  onClick={() => setChartSelectedStock(name)}
+                  className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                    activeStock === name
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-gray-600 border-gray-300 hover:border-slate-500'
+                  }`}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {trades.length === 0 ? (
+            <div className="text-center py-16 text-gray-400">
+              <AlertCircle className="w-16 h-16 mx-auto mb-4 opacity-50" />
+              <p className="text-base">거래 내역을 먼저 입력해주세요</p>
+            </div>
+          ) : chartLoading ? (
+            <div className="text-center py-16">
+              <div className="text-gray-500">차트 로딩 중...</div>
+            </div>
+          ) : chartError ? (
+            <div className="text-center py-16 text-red-500">
+              <AlertCircle className="w-16 h-16 mx-auto mb-4" />
+              <p className="text-base">{chartError}</p>
+            </div>
+          ) : stockData ? (
+            <>
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={stockData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 12, fill: '#6b7280' }}
+                  />
+                  <YAxis
+                    domain={['auto', 'auto']}
+                    tick={{ fontSize: 12, fill: '#6b7280' }}
+                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
+                  />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Legend />
+                  <Line
+                    type="monotone"
+                    dataKey="close"
+                    stroke="#0f172a"
+                    strokeWidth={2}
+                    name="종가"
+                    dot={false}
+                  />
+                  {stockTrades.map((trade) => {
+                    const matchingData = stockData.find(d => d.fullDate === trade.date);
+                    if (matchingData) {
+                      return (
+                        <ReferenceDot
+                          key={trade.id}
+                          x={matchingData.date}
+                          y={parseFloat(trade.price)}
+                          r={7}
+                          fill={trade.tradeType === 'buy' ? '#10b981' : '#ef4444'}
+                          stroke="#fff"
+                          strokeWidth={2}
+                        />
+                      );
+                    }
+                    return null;
+                  })}
+                </LineChart>
+              </ResponsiveContainer>
+
+              <div className="flex gap-6 mt-6 text-sm">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
+                  <span className="text-gray-600">매수</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 bg-red-500 rounded-full"></div>
+                  <span className="text-gray-600">매도</span>
+                </div>
+              </div>
+
+              <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <p className="text-sm text-blue-800">
+                  ✅ 실제 주가 데이터가 표시되고 있습니다! (Yahoo Finance API)
+                </p>
+              </div>
+            </>
+          ) : null}
+        </div>
+      </div>
+    );
+  };
 
   const SCORE_CRITERIA = [
     { label: '매수 타점', desc: '눌림목/지지선에서 매수했는가' },
@@ -1280,6 +1376,7 @@ React.useEffect(() => {
                         <th className="px-4 py-3 text-right">30일 후 가격</th>
                         <th className="px-4 py-3 text-right">수익률</th>
                         <th className="px-4 py-3 text-center">결과</th>
+                        <th className="px-4 py-3"></th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -1305,6 +1402,23 @@ React.useEffect(() => {
                             </td>
                             <td className="px-4 py-3 text-center text-lg">
                               {item.isCorrect === null ? <span className="text-gray-400 text-xs">대기</span> : item.isCorrect ? '✅' : '❌'}
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={async () => {
+                                  if (!window.confirm('이 분석 결과를 삭제할까요?')) return;
+                                  try {
+                                    await stockApi.deleteAnalysisResult(item.id);
+                                    setPerformanceData(prev => prev.filter(p => p.id !== item.id));
+                                  } catch {
+                                    alert('삭제에 실패했습니다.');
+                                  }
+                                }}
+                                className="text-gray-300 hover:text-red-500 transition-colors"
+                                title="삭제"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
                             </td>
                           </tr>
                         );

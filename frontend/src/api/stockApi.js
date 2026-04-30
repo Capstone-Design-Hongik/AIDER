@@ -114,6 +114,23 @@ const stockApi = {
     }
   },
 
+  // 거래 수정
+  updateTrade: async (id, trade) => {
+    try {
+      const response = await axios.put(`${API_BASE_URL}/trades/${id}`, {
+        stockName: trade.stockName,
+        tradeType: trade.tradeType,
+        date: trade.date,
+        price: parseFloat(trade.price),
+        quantity: parseInt(trade.quantity)
+      });
+      return response.data;
+    } catch (error) {
+      console.error('거래 수정 실패:', error);
+      throw error;
+    }
+  },
+
   // 거래 삭제
   deleteTrade: async (id) => {
     try {
@@ -170,6 +187,17 @@ const stockApi = {
       return response.data;
     } catch (error) {
       console.error('AI 성과 조회 실패:', error);
+      throw error;
+    }
+  },
+
+  // AI 성과 결과 삭제
+  deleteAnalysisResult: async (id) => {
+    try {
+      const response = await axios.delete(`${API_BASE_URL}/analysis/performance/${id}`);
+      return response.data;
+    } catch (error) {
+      console.error('분석 결과 삭제 실패:', error);
       throw error;
     }
   }
