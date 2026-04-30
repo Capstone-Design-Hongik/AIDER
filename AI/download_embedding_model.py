@@ -28,7 +28,7 @@ class EmbeddingModelManager:
             model.save(EMBEDDING_MODEL_PATH)
             print(f"✅ 모델 저장 완료: {EMBEDDING_MODEL_PATH}", flush=True)
 
-        actual_dim = model.get_sentence_embedding_dimension()
+        actual_dim = model.get_embedding_dimension()
         if actual_dim != EMBEDDING_DIM:
             print(f"⚠️  실제 차원: {actual_dim} (config.EMBEDDING_DIM={EMBEDDING_DIM})", flush=True)
 
