@@ -21,8 +21,10 @@ const StockTradingAnalyzer = () => {
   const [externalUrl, setExternalUrl] = useState('');
   const [selectedStock, setSelectedStock] = useState('');
   const [analysis, setAnalysis] = useState(null);
+  const [showScoreModal, setShowScoreModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [savedStrategies, setSavedStrategies] = useState([]);
+  const [strategySaveMsg, setStrategySaveMsg] = useState('');
 
   const [stockData, setStockData] = useState(null);
   const [chartLoading, setChartLoading] = useState(false);
@@ -257,6 +259,11 @@ React.useEffect(() => {
 
   const saveStrategy = () => {
     if (strategy === 'external' && externalUrl) {
+      if (savedStrategies.some(s => s.url === externalUrl)) {
+        setStrategySaveMsg('already');
+        setTimeout(() => setStrategySaveMsg(''), 2500);
+        return;
+      }
       const newStrategy = {
         id: Date.now(),
         type: 'external',
@@ -264,6 +271,8 @@ React.useEffect(() => {
         savedAt: new Date().toISOString().split('T')[0]
       };
       setSavedStrategies([...savedStrategies, newStrategy]);
+      setStrategySaveMsg('ok');
+      setTimeout(() => setStrategySaveMsg(''), 2500);
     }
   };
 
@@ -502,6 +511,12 @@ React.useEffect(() => {
                 >
                   전략 저장하기
                 </button>
+                {strategySaveMsg === 'ok' && (
+                  <p className="text-xs text-emerald-600 mt-2 text-center">✓ 전략이 저장되었습니다</p>
+                )}
+                {strategySaveMsg === 'already' && (
+                  <p className="text-xs text-amber-600 mt-2 text-center">이미 저장된 URL입니다</p>
+                )}
               </div>
             )}
 
@@ -661,8 +676,73 @@ React.useEffect(() => {
   );
 };
 
-  const renderAnalysisPage = () => ( 
+  const SCORE_CRITERIA = [
+    { label: '매수 타점', desc: '눌림목/지지선에서 매수했는가' },
+    { label: '기술적 지표 활용', desc: '이동평균 등 지표 기반 매매인가' },
+    { label: '추세 파악 능력', desc: '상승/하락 추세를 인식하고 대응했는가' },
+    { label: '리스크 관리', desc: '손절 기준이 있는가, 과도한 추가 매수는 없는가' },
+    { label: '전략 준수도', desc: 'YouTube 전략을 얼마나 따랐는가' },
+  ];
+  const GRADE_CRITERIA = [
+    { range: '90 ~ 100점', label: '완벽한 전략 실행', color: 'text-emerald-600' },
+    { range: '75 ~ 89점',  label: '대체로 우수',      color: 'text-blue-600'    },
+    { range: '60 ~ 74점',  label: '핵심은 이해했으나 개선 필요', color: 'text-sky-600' },
+    { range: '40 ~ 59점',  label: '전략과 괴리',       color: 'text-yellow-600'  },
+    { range: '0 ~ 39점',   label: '무계획적 매매',     color: 'text-red-600'     },
+  ];
+  const AI_SIGNAL_LABEL = { buy: '매수 추천', sell: '매도 추천', hold: '보유 관망' };
+  const AI_SIGNAL_STYLE = {
+    buy:  'bg-emerald-100 text-emerald-800 border border-emerald-200',
+    sell: 'bg-red-100 text-red-800 border border-red-200',
+    hold: 'bg-blue-100 text-blue-800 border border-blue-200',
+  };
+
+  const renderAnalysisPage = () => (
   <div className="max-w-4xl mx-auto">
+    {/* 점수 기준 모달 */}
+    {showScoreModal && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40"
+        onClick={() => setShowScoreModal(false)}
+      >
+        <div
+          className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-md mx-4"
+          onClick={e => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-bold text-gray-900">종합 점수 채점 기준</h3>
+            <button onClick={() => setShowScoreModal(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
+          </div>
+
+          <p className="text-xs text-gray-500 mb-3">각 항목 0~20점 × 5개 = 100점 만점</p>
+
+          <div className="space-y-2 mb-5">
+            {SCORE_CRITERIA.map((c, i) => (
+              <div key={i} className="flex gap-3 p-2.5 bg-gray-50 rounded-lg">
+                <span className="w-5 h-5 flex-shrink-0 bg-slate-900 text-white rounded-full text-xs flex items-center justify-center font-bold">{i + 1}</span>
+                <div>
+                  <div className="text-sm font-medium text-gray-800">{c.label}</div>
+                  <div className="text-xs text-gray-500 mt-0.5">{c.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="border-t border-gray-100 pt-4">
+            <p className="text-xs font-semibold text-gray-700 mb-2">등급 기준</p>
+            <div className="space-y-1">
+              {GRADE_CRITERIA.map((g, i) => (
+                <div key={i} className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500 w-24">{g.range}</span>
+                  <span className={`font-medium ${g.color}`}>{g.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
     {analysis ? (
       <div className="space-y-6">
         {/* 총점 카드 */}
@@ -672,23 +752,40 @@ React.useEffect(() => {
               <h2 className="text-xl font-semibold text-gray-900 mb-2">AI 분석 결과</h2>
               <p className="text-sm text-gray-500">
                 선택한 전략: <span className="font-medium text-gray-700">
-                  {strategy === 'bollinger' ? '볼린저 밴드' : 
+                  {strategy === 'bollinger' ? '볼린저 밴드' :
                    strategy === 'trend' ? '추세추종' : '외부 전략'}
                 </span>
               </p>
               {strategy === 'external' && externalUrl && (
-                <a 
-                  href={externalUrl} 
-                  target="_blank" 
+                <a
+                  href={externalUrl}
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="text-sm text-blue-600 hover:text-blue-800 mt-1 block break-all"
                 >
                   🔗 {externalUrl}
                 </a>
               )}
+              {analysis.signal && (
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="text-xs text-gray-500">AI 추천 신호</span>
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${AI_SIGNAL_STYLE[analysis.signal] || 'bg-gray-100 text-gray-700'}`}>
+                    {AI_SIGNAL_LABEL[analysis.signal] || analysis.signal}
+                  </span>
+                </div>
+              )}
             </div>
             <div className="text-center">
-              <div className="text-sm text-gray-500 mb-1">종합 점수</div>
+              <div className="flex items-center justify-center gap-1 mb-1">
+                <span className="text-sm text-gray-500">종합 점수</span>
+                <button
+                  onClick={() => setShowScoreModal(true)}
+                  className="w-4 h-4 rounded-full bg-gray-200 hover:bg-gray-300 text-gray-600 text-xs flex items-center justify-center leading-none transition-colors"
+                  title="채점 기준 보기"
+                >
+                  ?
+                </button>
+              </div>
               <div className={`text-4xl font-bold ${
                 analysis.total_score >= 80 ? 'text-emerald-600' :
                 analysis.total_score >= 60 ? 'text-blue-600' :
@@ -715,13 +812,18 @@ React.useEffect(() => {
                 }`}>
                   {index + 1}
                 </div>
-                
+
                 <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-3">
+                  <div className="flex items-center gap-2 mb-3 flex-wrap">
                     <h3 className="text-lg font-semibold text-gray-900">{item.stockName}</h3>
-                    <span className="px-3 py-1 bg-slate-100 text-slate-700 text-sm rounded-full font-medium">
-                      {item.type}
+                    <span className="px-2.5 py-0.5 bg-slate-100 text-slate-600 text-xs rounded-full">
+                      {item.type === 'buy' ? '매수 거래' : item.type === 'sell' ? '매도 거래' : item.type}
                     </span>
+                    {item.signal && (
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${AI_SIGNAL_STYLE[item.signal] || 'bg-gray-100 text-gray-700'}`}>
+                        {AI_SIGNAL_LABEL[item.signal] || item.signal}
+                      </span>
+                    )}
                   </div>
 
                   {/* AI 조언 */}
@@ -1218,17 +1320,26 @@ React.useEffect(() => {
                   <div className="text-gray-400 text-sm text-center">30일 후 자동 평가됩니다</div>
                 ) : (
                   <>
-                    <ResponsiveContainer width="100%" height={180}>
+                    <ResponsiveContainer width="100%" height={220}>
                       <RechartsPie>
                         <Pie
                           data={pieData}
                           cx="50%"
                           cy="50%"
                           innerRadius={45}
-                          outerRadius={75}
+                          outerRadius={70}
                           dataKey="value"
                           labelLine={false}
-                          label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                          label={({ name, percent, cx, cy, midAngle, outerRadius: or }) => {
+                            const RADIAN = Math.PI / 180;
+                            const x = cx + (or + 20) * Math.cos(-midAngle * RADIAN);
+                            const y = cy + (or + 20) * Math.sin(-midAngle * RADIAN);
+                            return (
+                              <text x={x} y={y} textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize={12} fill="#374151">
+                                {`${name} ${(percent * 100).toFixed(0)}%`}
+                              </text>
+                            );
+                          }}
                         >
                           {pieData.map((entry, index) => (
                             <Cell key={`cell-${index}`} fill={PIE_COLORS[index]} />
