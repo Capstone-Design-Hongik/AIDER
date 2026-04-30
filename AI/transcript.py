@@ -8,7 +8,7 @@ import traceback
 
 def _make_api(use_proxy: bool) -> YouTubeTranscriptApi:
     """proxy 적용 또는 직접 연결 API 인스턴스 반환"""
-    proxy_url = os.environ.get("HTTPS_PROXY")
+    proxy_url = os.environ.get("YOUTUBE_PROXY")
     if use_proxy and proxy_url:
         print(f"[Transcript] 프록시 사용: {proxy_url.split('@')[-1]}")
         return YouTubeTranscriptApi(

@@ -40,6 +40,6 @@ RAG_K_MAX                  = 10
 SEARCH_SCORE_THRESHOLD     = 0.5
 SEARCH_CONFIDENCE_THRESHOLD = 0.70
 
-# YouTube Proxy — HTTPS_PROXY 단일 환경변수
+# YouTube Proxy — YOUTUBE_PROXY 환경변수 (YouTube 요청에만 적용)
 # 형식: http://user:pass@host:port
-# Railway Variables 또는 .env 파일에 설정
+# Railway Variables 또는 .env 파일에 설정 (HTTPS_PROXY 사용 금지 — 시스템 전체에 영향)
