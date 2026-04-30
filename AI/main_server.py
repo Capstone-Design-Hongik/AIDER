@@ -185,6 +185,7 @@ async def health():
 # ── 핵심 분석 엔드포인트 ────────────────────────────────────
 
 @app.post("/analyze")
+@app.post("/api/analyze")
 async def analyze(data: dict, background_tasks: BackgroundTasks):
     """
     흐름:

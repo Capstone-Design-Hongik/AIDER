@@ -25,7 +25,7 @@ class AgentManager:
 
     async def run(self, user_data: UserData) -> RAGOutput:
         print("\n" + "=" * 70)
-        print("🚀 Agentic RAG 파이프라인 시작")
+        print("Agentic RAG 파이프라인 시작")
         print("=" * 70)
 
         state: Dict = {
