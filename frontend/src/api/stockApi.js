@@ -149,6 +149,17 @@ const stockApi = {
       console.error('AI 분석 실패:', error);
       throw error;
     }
+  },
+
+  // AI 성과 조회
+  getAiPerformance: async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/analysis/performance`);
+      return response.data;
+    } catch (error) {
+      console.error('AI 성과 조회 실패:', error);
+      throw error;
+    }
   }
 };
 
