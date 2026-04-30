@@ -1,22 +1,27 @@
 from youtube_transcript_api import YouTubeTranscriptApi
+from youtube_transcript_api.proxies import WebshareProxyConfig, GenericProxyConfig
 from typing import List, Dict, Optional
 import traceback
 from config import YOUTUBE_PROXY_HOST, YOUTUBE_PROXY_PORT, YOUTUBE_PROXY_USER, YOUTUBE_PROXY_PASS
 
 
-def _build_proxies():
-    """Webshare rotating proxy URL 생성. 설정 없으면 None 반환."""
-    if not YOUTUBE_PROXY_USER or not YOUTUBE_PROXY_PASS:
-        return None
-    url = f"http://{YOUTUBE_PROXY_USER}:{YOUTUBE_PROXY_PASS}@{YOUTUBE_PROXY_HOST}:{YOUTUBE_PROXY_PORT}"
-    return {"http": url, "https": url}
+def _make_api(use_proxy: bool) -> YouTubeTranscriptApi:
+    """proxy 적용 또는 직접 연결 API 인스턴스 반환 (v1.x 전용)"""
+    if use_proxy and YOUTUBE_PROXY_USER and YOUTUBE_PROXY_PASS:
+        if YOUTUBE_PROXY_HOST == "p.webshare.io":
+            proxy_config = WebshareProxyConfig(
+                proxy_username=YOUTUBE_PROXY_USER,
+                proxy_password=YOUTUBE_PROXY_PASS,
+            )
+            print(f"[Transcript] Webshare 프록시 사용")
+        else:
+            url = f"http://{YOUTUBE_PROXY_USER}:{YOUTUBE_PROXY_PASS}@{YOUTUBE_PROXY_HOST}:{YOUTUBE_PROXY_PORT}"
+            proxy_config = GenericProxyConfig(http_url=url, https_url=url)
+            print(f"[Transcript] Generic 프록시 사용: {YOUTUBE_PROXY_HOST}:{YOUTUBE_PROXY_PORT}")
+        return YouTubeTranscriptApi(proxy_config=proxy_config)
 
-
-def _make_api() -> YouTubeTranscriptApi:
-    """proxy 적용된 API 인스턴스 생성. proxy 없으면 직접 연결."""
-    proxies = _build_proxies()
-    if proxies:
-        return YouTubeTranscriptApi(proxies=proxies)
+    if use_proxy:
+        print("[Transcript] ⚠️  프록시 자격증명 없음 → 직접 연결로 대체")
     return YouTubeTranscriptApi()
 
 
@@ -43,19 +48,20 @@ class TranscriptManager:
         YouTube 자막을 텍스트로 반환.
 
         우선순위:
-        1. 한국어/영어 공식 자막
-        2. 한국어/영어 자동생성 자막
+        1. proxy + 공식 자막 (ko/en)
+        2. proxy + 자동생성 자막
+        3. 직접 연결 + 공식 자막
+        4. 직접 연결 + 자동생성 자막
         """
         if not video_id:
             return None
 
         print(f"\n[Transcript] 자막 추출 시도: {video_id}")
 
-        for attempt, use_proxy in enumerate([(True, "proxy"), (False, "직접 연결")]):
+        for attempt, (use_proxy, label) in enumerate([(True, "proxy"), (False, "직접 연결")]):
             try:
-                use_p, label = use_proxy
                 print(f"[Transcript] 시도 {attempt + 1}: {label}")
-                api = _make_api() if use_p else YouTubeTranscriptApi()
+                api = _make_api(use_proxy)
                 transcript_list = api.list(video_id)
 
                 try:
@@ -95,7 +101,7 @@ class TranscriptManager:
             return []
 
         try:
-            api = _make_api()
+            api = _make_api(use_proxy=True)
             transcript_list = api.list(video_id)
 
             try:

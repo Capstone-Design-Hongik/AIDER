@@ -16,7 +16,7 @@ chromadb>=0.4.24
 sentence-transformers>=2.7.0
 
 # YouTube 자막
-youtube-transcript-api>=0.6.2
+youtube-transcript-api>=1.0.0
 
 # PDF
 PyPDF2>=3.0.1
