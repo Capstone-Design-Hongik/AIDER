@@ -51,6 +51,16 @@ public class TradeController {
         return ResponseEntity.ok(trades);
     }
 
+    // 거래 수정
+    // PUT /api/trades/{id}
+    @PutMapping("/{id}")
+    public ResponseEntity<TradeResponse> updateTrade(@PathVariable Long id,
+                                                     @RequestBody TradeCreateRequest request) {
+        log.info("Updating trade: {}", id);
+        TradeResponse response = tradeService.updateTrade(id, request);
+        return ResponseEntity.ok(response);
+    }
+
     // 거래 삭제
     // DELETE /api/trades/{id}
     @DeleteMapping("/{id}")

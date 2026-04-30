@@ -55,6 +55,14 @@ public class AnalysisResultService {
                 .collect(Collectors.toList());
     }
 
+    @Transactional
+    public void delete(Long id) {
+        if (!analysisResultRepository.existsById(id)) {
+            throw new RuntimeException("분석 결과를 찾을 수 없습니다: " + id);
+        }
+        analysisResultRepository.deleteById(id);
+    }
+
     private void evaluatePending() {
         List<AnalysisResult> pending = analysisResultRepository
                 .findByEvaluationDateLessThanEqualAndPriceAtEvaluationIsNull(LocalDate.now());

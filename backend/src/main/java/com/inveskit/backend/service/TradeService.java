@@ -61,6 +61,15 @@ public class TradeService {
                 .collect(Collectors.toList());
     }
 
+    // 거래 수정
+    @Transactional
+    public TradeResponse updateTrade(Long id, TradeCreateRequest request) {
+        Trade trade = tradeRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("거래 내역을 찾을 수 없습니다: " + id));
+        trade.update(request.getTradeType(), request.getDate(), request.getPrice(), request.getQuantity());
+        return TradeResponse.from(trade);
+    }
+
     // 거래 삭제
     @Transactional
     public void deleteTrade(Long id) {

@@ -44,6 +44,13 @@ public class Trade {
         createdAt = LocalDateTime.now();
     }
 
+    public void update(String tradeType, LocalDate tradeDate, Double price, Integer quantity) {
+        this.tradeType = tradeType.equalsIgnoreCase("buy") ? TradeType.BUY : TradeType.SELL;
+        this.tradeDate = tradeDate;
+        this.price = price;
+        this.quantity = quantity;
+    }
+
     public enum TradeType {
         BUY, SELL
     }
