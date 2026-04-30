@@ -308,6 +308,114 @@ class RefinedSearchTool(BaseTool):
         return results, refined
 
 
+class InternalStrategyTool(BaseTool):
+    """YouTube 없이 bollinger/trend 전략 원칙을 TranscriptAnalysisResult로 반환"""
+
+    _CONFIGS = {
+        "bollinger": {
+            "strategy_name": "볼린저밴드 전략",
+            "keywords": ["볼린저밴드", "상단밴드", "하단밴드", "중간선", "20MA", "밴드폭", "스퀴즈", "돌파"],
+            "sections": [
+                {
+                    "section_name": "볼린저밴드 매수 신호",
+                    "content": "하단밴드 터치 후 반등, 밴드 스퀴즈 이후 상단 돌파",
+                    "summary": "하단밴드 지지 확인 후 중간선(20MA) 돌파 시 매수",
+                    "key_points": [
+                        "하단밴드 터치 후 양봉 반등 확인",
+                        "밴드폭 축소(스퀴즈) 이후 돌파 시 추세 시작",
+                        "중간선(20MA)이 지지선 역할 확인",
+                    ],
+                    "emotion": "기회",
+                    "target_audience": ["중급 투자자"],
+                },
+                {
+                    "section_name": "볼린저밴드 매도 신호",
+                    "content": "상단밴드 터치 후 음봉, 중간선 하향 이탈",
+                    "summary": "상단밴드 도달 후 되돌림 또는 중간선 이탈 시 매도",
+                    "key_points": [
+                        "상단밴드 터치 후 음봉 발생 시 단기 고점 신호",
+                        "중간선(20MA) 하향 이탈 시 하락 추세 전환",
+                        "밴드 확장 후 수축 전환은 추세 종료 신호",
+                    ],
+                    "emotion": "경고",
+                    "target_audience": ["중급 투자자"],
+                },
+                {
+                    "section_name": "볼린저밴드 리스크 관리",
+                    "content": "하단밴드 하향 이탈 시 손절, 상단밴드 과열 구간 비중 축소",
+                    "summary": "하단밴드 아래 종가 이탈 시 즉시 손절",
+                    "key_points": [
+                        "하단밴드 종가 이탈 시 즉시 손절",
+                        "상단밴드 연속 터치는 강한 추세이므로 추격 매도 금지",
+                    ],
+                    "emotion": "위험",
+                    "target_audience": ["모든 투자자"],
+                },
+            ],
+        },
+        "trend": {
+            "strategy_name": "추세추종 전략",
+            "keywords": ["추세", "이동평균", "골든크로스", "데드크로스", "20MA", "60MA", "추세선", "고점갱신"],
+            "sections": [
+                {
+                    "section_name": "추세 진입 신호",
+                    "content": "골든크로스 발생, 20MA 상향 돌파 후 지지 확인",
+                    "summary": "단기·중기 이동평균 정배열 확인 후 눌림목에서 매수",
+                    "key_points": [
+                        "5MA가 20MA를 상향 돌파(골든크로스)할 때 매수",
+                        "20MA 우상향이면서 현재가 20MA 위에서 지지 확인",
+                        "고점·저점 연속 상승이면 상승 추세 유효",
+                    ],
+                    "emotion": "기회",
+                    "target_audience": ["중급 투자자"],
+                },
+                {
+                    "section_name": "추세 청산 신호",
+                    "content": "데드크로스, 20MA 하향 이탈 후 저항선 전환",
+                    "summary": "데드크로스 발생 또는 20MA 하향 이탈 시 매도",
+                    "key_points": [
+                        "5MA가 20MA 아래 이탈(데드크로스)하면 매도",
+                        "20MA 우하향 전환 시 추세 종료",
+                        "직전 저점 하향 돌파 시 하락 추세 전환",
+                    ],
+                    "emotion": "경고",
+                    "target_audience": ["중급 투자자"],
+                },
+                {
+                    "section_name": "추세추종 리스크 관리",
+                    "content": "횡보 구간 진입 금지, 분할 매수로 리스크 분산",
+                    "summary": "횡보 구간 관망 후 추세 확인 시 분할 매수",
+                    "key_points": [
+                        "20MA 기울기 평탄한 횡보 구간 진입 금지",
+                        "추세 확인 후 3분할 매수로 진입 단가 분산",
+                        "60MA 하향 이탈은 중기 추세 전환으로 전량 매도 고려",
+                    ],
+                    "emotion": "위험",
+                    "target_audience": ["모든 투자자"],
+                },
+            ],
+        },
+    }
+
+    def __init__(self):
+        super().__init__("internal_strategy")
+
+    async def execute(self, strategy: str) -> TranscriptAnalysisResult:
+        cfg = self._CONFIGS.get(strategy, self._CONFIGS["trend"])
+        print(f"\n  ✅ 내부 전략 로드: {cfg['strategy_name']}")
+        return TranscriptAnalysisResult(
+            sections=[TranscriptSection(**s) for s in cfg["sections"]],
+            keywords=cfg["keywords"],
+            structure={
+                "video_id":       f"internal_{strategy}",
+                "original_length": 0,
+                "strategy_name":  cfg["strategy_name"],
+            },
+            confidence=0.95,
+            processing_time=0.0,
+        )
+
+
 class ValidationTool(BaseTool):
     def __init__(self):
         super().__init__("validation")
