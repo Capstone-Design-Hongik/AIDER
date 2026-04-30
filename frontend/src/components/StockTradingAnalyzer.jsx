@@ -141,8 +141,8 @@ React.useEffect(() => {
     const unique = [...new Set(trades.map(t => t.stockName))];
     if (unique.length === 1) {
       setSelectedStock(unique[0]);
-    } else if (!unique.includes(selectedStock)) {
-      setSelectedStock('');
+    } else {
+      setSelectedStock(prev => unique.includes(prev) ? prev : '');
     }
   }, [trades]);
 
