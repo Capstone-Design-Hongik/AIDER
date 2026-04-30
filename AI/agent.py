@@ -3,7 +3,7 @@ from typing import Dict
 
 from models import UserData, AgentDecision, RAGOutput, ScoreBreakdown
 from tools import (
-    UserAnalysisTool, TranscriptAnalysisTool,
+    UserAnalysisTool, TranscriptAnalysisTool, InternalStrategyTool,
     VectorSearchTool, RefinedSearchTool, ValidationTool,
     _chat, _extract_json,
 )
@@ -17,6 +17,7 @@ class AgentManager:
         self.tools = {
             "user_analysis":       UserAnalysisTool(),
             "transcript_analysis": TranscriptAnalysisTool(),
+            "internal_strategy":   InternalStrategyTool(),
             "vector_search":       VectorSearchTool(vector_db),
             "refined_search":      RefinedSearchTool(vector_db),
             "validation":          ValidationTool(),
@@ -40,12 +41,22 @@ class AgentManager:
 
         # ── Step 1: 병렬 분석 ─────────────────────────────────
         print("\n" + "─" * 70)
-        print("Step 1️⃣  병렬 분석 (사용자 분석 + 자막 분석)")
+        strategy = user_data.strategy
+        if strategy == "external":
+            print("Step 1️⃣  병렬 분석 (사용자 분석 + YouTube 자막 분석)")
+            strategy_task = asyncio.create_task(
+                self.tools["transcript_analysis"].execute(user_data.externalUrl)
+            )
+        else:
+            print(f"Step 1️⃣  병렬 분석 (사용자 분석 + 내부 전략: {strategy})")
+            strategy_task = asyncio.create_task(
+                self.tools["internal_strategy"].execute(strategy)
+            )
         print("─" * 70)
 
         state["user_analysis"], state["transcript_analysis"] = await asyncio.gather(
             asyncio.create_task(self.tools["user_analysis"].execute(user_data)),
-            asyncio.create_task(self.tools["transcript_analysis"].execute(user_data.externalUrl)),
+            strategy_task,
         )
 
         # ── Step 2: Agent 의사결정 루프 ───────────────────────
@@ -99,19 +110,16 @@ class AgentManager:
 
             print(f"└─")
 
-        # ── Step 3: total_score 산정 ───────────────────────────
+        # ── Step 3+4: total_score 산정 + 최종 조언 생성 (병렬) ──
         print("\n" + "─" * 70)
-        print("Step 3️⃣  total_score 산정")
+        print("Step 3️⃣+4️⃣  total_score 산정 + 최종 조언 생성 (병렬)")
         print("─" * 70)
-        total_score = await self._calculate_total_score(state, user_data)
+        total_score, final_advice = await asyncio.gather(
+            self._calculate_total_score(state, user_data),
+            self._generate_advice(state, user_data),
+        )
         print(f"  ✅ total_score: {total_score.total:.1f}점 ({total_score.grade})")
-
-        # ── Step 4: 최종 조언 생성 ────────────────────────────
-        print("\n" + "─" * 70)
-        print("Step 4️⃣  최종 조언 생성")
-        print("─" * 70)
-        final_advice = await self._generate_advice(state, user_data, total_score)
-        print(f"  ✅ {len(final_advice)}자")
+        print(f"  ✅ 조언: {len(final_advice)}자")
 
         print("\n" + "=" * 70)
         print("✅ 파이프라인 완료")
@@ -128,7 +136,7 @@ class AgentManager:
 
     # ── 의사결정 (규칙 기반) ───────────────────────────────────────
 
-    async def _decide(self, state: Dict, _iteration: int) -> AgentDecision:
+    async def _decide(self, state: Dict, _: int) -> AgentDecision:
         count = len(state["search_results"])
         if count < 3:
             return AgentDecision(
@@ -311,7 +319,7 @@ JSON만 출력:
 
     # ── 최종 조언 생성 ─────────────────────────────────────────────
 
-    async def _generate_advice(self, state: Dict, user_data: UserData, score: ScoreBreakdown) -> str:
+    async def _generate_advice(self, state: Dict, user_data: UserData) -> str:
         stock_name = user_data.trades[0].stockName if user_data.trades else "종목"
         insights   = state["user_analysis"].additional_insights
         chart      = self._calc_chart(user_data)
@@ -320,21 +328,35 @@ JSON만 출력:
             f"- {t.date} {t.tradeType.upper()} {t.quantity}주 @ {t.price:,.0f}원"
             for t in user_data.trades
         )
+
+        # 전략 원칙: external은 YouTube 자막 직접 요약, 내부 전략은 섹션 원칙
+        ta = state["transcript_analysis"]
+        strategy_name = ta.structure.get("strategy_name", "투자 전략")
+        transcript_str = "\n".join(
+            f"- [{s.section_name}] {s.summary} | 핵심: {', '.join(s.key_points[:2])}"
+            for s in ta.sections
+        )
+
+        # DB 검색 결과: external일 때 DB 미스 가능성 있으므로 보조 참고로만 사용
         search_str = "\n".join(
-            f"[{i+1}] {r.content[:250]}"
-            for i, r in enumerate(state["search_results"][:5])
-        ) if state["search_results"] else "검색 결과 없음"
+            f"[{i+1}] {r.content[:200]}"
+            for i, r in enumerate(state["search_results"][:3])
+        ) if state["search_results"] else ""
 
         prompt = f"""
-당신은 기술적 분석 기반의 투자 분석가입니다.
-아래 차트 데이터와 YouTube 전략을 바탕으로 {stock_name}의 향후 전망과 대응 전략을 작성하세요.
-과거 매매 평가가 아닌, 지금부터 어떻게 해야 하는지를 중심으로 쓰세요.
+당신은 {strategy_name} 전략을 전문으로 하는 투자 분석가입니다.
+아래 [전략 원칙]이 가장 중요한 판단 기준입니다. 차트 데이터는 전략 원칙을 적용하는 보조 수단입니다.
+과거 매매 평가가 아닌, 지금부터 어떻게 해야 하는지를 전략 원칙 기준으로 서술하세요.
 
+━━━ 핵심 판단 기준: {strategy_name} 전략 원칙 ━━━
+{transcript_str}
+{"" if not search_str else f"{chr(10)}[보조 참고]{chr(10)}{search_str}{chr(10)}"}
+━━━ 보조 데이터: 차트 지표 ━━━
 [매매 내역]
 {trades_str}
 - 평균 매수가: {insights.get('avg_buy_price', 0):,.0f}원 / 현재가: {insights.get('latest_price', 0):,.0f}원 / 수익률: {insights.get('pnl_pct', 0):+.2f}%
 
-[차트 지표 ({chart.get('period', '')})]
+[차트 ({chart.get('period', '')})]
 - 현재가: {chart.get('current', 0):,.0f}원
 - 5MA: {chart.get('ma5', 0):,.0f}원 / 20MA: {chart.get('ma20', 0):,.0f}원 / 60MA: {chart.get('ma60', 0):,.0f}원
 - 현재가 위치: {chart.get('ma20_signal', '')} / {chart.get('cross', '')}
@@ -342,27 +364,22 @@ JSON만 출력:
 - 20일 지지선: {chart.get('support', 0):,.0f}원 / 저항선: {chart.get('resistance', 0):,.0f}원
 - 60일 등락률: {chart.get('change_60d', 0):+.2f}%
 
-[YouTube 전략 조언]
-{search_str}
-
-[total_score: {score.total:.1f}점 / {score.grade}]
-매수 타점 {score.entry_timing:.0f} / 지표활용 {score.indicator_usage:.0f} / 추세파악 {score.trend_awareness:.0f} / 리스크관리 {score.risk_management:.0f} / 전략준수 {score.strategy_adherence:.0f} (각 20점 만점)
-
 작성 규칙:
+- evaluation과 advice 모두 위 전략 원칙에 근거해 서술할 것
 - 마크다운 볼드(**), 이탤릭(*) 일절 사용 금지
 - 인사말, 축하 표현 금지
 - 딱딱하고 간결한 어조
 
 signal 판단 기준:
-- buy  : 지지선 근처 눌림목이거나 골든크로스 진입 시점, 추가 매수 여지 있음
-- sell : 저항선 돌파 실패, 데드크로스 또는 손절 기준 이탈, 즉시 매도 필요
-- hold : 추세 불명확하거나 관망이 유리한 횡보 구간
+- buy  : 전략 원칙상 매수 신호 조건 충족 (지지선 근처, 골든크로스 등)
+- sell : 전략 원칙상 청산 신호 조건 충족 (저항선 실패, 데드크로스, 손절 이탈)
+- hold : 전략 원칙상 명확한 신호 없음, 관망 구간
 
 아래 JSON 형식으로만 출력하세요:
 {{
   "signal": "buy 또는 sell 또는 hold",
-  "evaluation": "해당 매매의 차트 기반 평가",
-  "advice": "지금부터의 대응 전략, 진입·청산 가격 포함"
+  "evaluation": "전략 원칙 기준으로 현재 매매 상황 평가",
+  "advice": "전략 원칙에 근거한 지금부터의 대응 전략, 진입·청산 가격 포함"
 }}
 """
         return _chat(LLMConfig.FINAL_ADVICE_MODEL, prompt, max_tokens=2000)

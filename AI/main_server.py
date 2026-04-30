@@ -240,8 +240,8 @@ async def analyze(data: dict, background_tasks: BackgroundTasks):
             "total_score": result.total_score.total,
         }
 
-        # 4. YouTube 자막 DB 저장 → 백그라운드 등록 (응답 반환 후 실행됨)
-        if result.transcript_analysis and vector_db:
+        # 4. YouTube 자막 DB 저장 → 백그라운드 등록 (external 전략일 때만)
+        if result.transcript_analysis and vector_db and user_data.strategy == "external":
             background_tasks.add_task(
                 _bg_save_transcript,
                 vector_db,
