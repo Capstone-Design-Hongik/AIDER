@@ -4,6 +4,7 @@ import com.inveskit.backend.dto.AnalysisRequest;
 import com.inveskit.backend.dto.AnalysisResponse;
 import com.inveskit.backend.dto.StockPriceResponse;
 import com.inveskit.backend.dto.TradeResponse;
+import com.inveskit.backend.service.AnalysisResultService;
 import com.inveskit.backend.service.AnalysisService;
 import com.inveskit.backend.service.StockInfoService;
 import com.inveskit.backend.service.StockPriceService;
@@ -14,7 +15,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -24,12 +27,13 @@ import java.util.stream.Collectors;
 public class AnalysisController {
 
     private final AnalysisService analysisService;
+    private final AnalysisResultService analysisResultService;
     private final TradeService tradeService;
     private final StockPriceService stockPriceService;
     private final StockInfoService stockInfoService;
 
     @PostMapping
-    public ResponseEntity<AnalysisResponse> analyzeTrading(
+    public ResponseEntity<Map<String, Object>> analyzeTrading(
             @RequestBody AnalysisRequestDto requestDto
     ) {
         log.info("AI 분석 요청 수신 - strategy: {}, externalUrl: {}",
@@ -91,13 +95,41 @@ public class AnalysisController {
             // 4. Flask API 호출
             AnalysisResponse response = analysisService.analyzeTrading(analysisRequest);
 
-            log.info("AI 분석 완료");
-            return ResponseEntity.ok(response);
+            // 5. 분석 결과 DB 저장 (AI 성과 추적용)
+            Double latestPrice = stockPriceInfos.isEmpty() ? null
+                    : stockPriceInfos.get(stockPriceInfos.size() - 1).getClosePrice();
+            String stockCode = tradeInfos.get(0).getStockCode();
+
+            if (latestPrice != null && response.getSignal() != null) {
+                analysisResultService.save(stockName, stockCode, response.getSignal(), latestPrice);
+                log.info("분석 결과 저장 완료 - {}, signal: {}, price: {}", stockName, response.getSignal(), latestPrice);
+            }
+
+            // 6. 프론트엔드 응답 구성
+            Map<String, Object> analysisItem = new HashMap<>();
+            analysisItem.put("stockName", stockName);
+            analysisItem.put("type", response.getType());
+            analysisItem.put("advice", response.getAdvice());
+            analysisItem.put("signal", response.getSignal());
+            analysisItem.put("evaluation", response.getEvaluation());
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("total_score", response.getTotalScore());
+            result.put("signal", response.getSignal());
+            result.put("analysis", List.of(analysisItem));
+
+            log.info("AI 분석 완료 - signal: {}, total_score: {}", response.getSignal(), response.getTotalScore());
+            return ResponseEntity.ok(result);
 
         } catch (Exception e) {
             log.error("AI 분석 실패: {}", e.getMessage(), e);
             return ResponseEntity.badRequest().build();
         }
+    }
+
+    @GetMapping("/performance")
+    public ResponseEntity<List<Map<String, Object>>> getPerformance() {
+        return ResponseEntity.ok(analysisResultService.getPerformance());
     }
 
     // 간단한 요청 DTO
