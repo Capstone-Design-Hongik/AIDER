@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TrendingUp, BarChart3, Plus, Trash2, AlertCircle, FileText, Activity, User, PieChart, Download, Bookmark } from 'lucide-react';
+import { TrendingUp, BarChart3, Plus, Trash2, AlertCircle, FileText, Activity, User, PieChart, Download, Bookmark, Trophy } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceDot, PieChart as RechartsPie, Pie, Cell } from 'recharts';
 import stockApi from '../api/stockApi';
 
@@ -1033,6 +1033,149 @@ React.useEffect(() => {
     );
   };
 
+  const renderAiPerformancePage = () => {
+    const mockData = [
+      { stockName: '삼성전자', analysisDate: '2025-03-10', signal: 'buy', priceAtAnalysis: 73000, priceAtEvaluation: 78500, isCorrect: true },
+      { stockName: '카카오', analysisDate: '2025-03-15', signal: 'sell', priceAtAnalysis: 48000, priceAtEvaluation: 45200, isCorrect: true },
+      { stockName: '현대차', analysisDate: '2025-04-01', signal: 'hold', priceAtAnalysis: 215000, priceAtEvaluation: 198000, isCorrect: false },
+      { stockName: 'LG에너지솔루션', analysisDate: '2025-04-10', signal: 'buy', priceAtAnalysis: 320000, priceAtEvaluation: 335000, isCorrect: true },
+      { stockName: 'NAVER', analysisDate: '2025-04-15', signal: 'hold', priceAtAnalysis: 185000, priceAtEvaluation: 190000, isCorrect: true },
+    ];
+
+    const signalLabel = { buy: '추가매수', sell: '매도', hold: '보유' };
+    const signalColor = {
+      buy: 'bg-emerald-100 text-emerald-800',
+      sell: 'bg-red-100 text-red-800',
+      hold: 'bg-blue-100 text-blue-800',
+    };
+
+    const correctCount = mockData.filter(d => d.isCorrect).length;
+    const accuracy = ((correctCount / mockData.length) * 100).toFixed(1);
+
+    const pieData = [
+      { name: '적중', value: correctCount },
+      { name: '미적중', value: mockData.length - correctCount },
+    ];
+    const PIE_COLORS = ['#10b981', '#f87171'];
+
+    return (
+      <div className="max-w-5xl mx-auto">
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">AI 성과 분석</h2>
+          <p className="text-gray-500 text-sm mt-1">AI 조언의 적중률과 수익 기여도를 확인하세요</p>
+          <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-amber-50 border border-amber-200 rounded-full text-xs text-amber-700">
+            <span>⚠️</span>
+            <span>현재 샘플 데이터로 표시 중입니다. 실제 기능은 준비 중입니다.</span>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-white rounded-lg border border-gray-200 p-5">
+              <div className="text-sm text-gray-500 mb-1">전체 분석 건수</div>
+              <div className="text-3xl font-bold text-gray-900">{mockData.length}건</div>
+            </div>
+            <div className="bg-white rounded-lg border border-gray-200 p-5">
+              <div className="text-sm text-gray-500 mb-1">적중 건수</div>
+              <div className="text-3xl font-bold text-emerald-600">{correctCount}건</div>
+            </div>
+            <div className={`rounded-lg border p-5 ${parseFloat(accuracy) >= 60 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+              <div className={`text-sm mb-1 ${parseFloat(accuracy) >= 60 ? 'text-emerald-600' : 'text-red-600'}`}>AI 적중률</div>
+              <div className={`text-3xl font-bold ${parseFloat(accuracy) >= 60 ? 'text-emerald-700' : 'text-red-700'}`}>{accuracy}%</div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100">
+                <h3 className="text-base font-semibold text-gray-900">조언별 결과 내역</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-500 text-xs uppercase tracking-wide">
+                    <tr>
+                      <th className="px-4 py-3 text-left">종목</th>
+                      <th className="px-4 py-3 text-left">분석일</th>
+                      <th className="px-4 py-3 text-left">신호</th>
+                      <th className="px-4 py-3 text-right">분석가격</th>
+                      <th className="px-4 py-3 text-right">30일 후 가격</th>
+                      <th className="px-4 py-3 text-right">수익률</th>
+                      <th className="px-4 py-3 text-center">결과</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {mockData.map((item, idx) => {
+                      const returnRate = (((item.priceAtEvaluation - item.priceAtAnalysis) / item.priceAtAnalysis) * 100).toFixed(1);
+                      return (
+                        <tr key={idx} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 font-medium text-gray-900">{item.stockName}</td>
+                          <td className="px-4 py-3 text-gray-500">{item.analysisDate}</td>
+                          <td className="px-4 py-3">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${signalColor[item.signal]}`}>
+                              {signalLabel[item.signal]}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-right text-gray-700">{item.priceAtAnalysis.toLocaleString()}원</td>
+                          <td className="px-4 py-3 text-right text-gray-700">{item.priceAtEvaluation.toLocaleString()}원</td>
+                          <td className={`px-4 py-3 text-right font-medium ${parseFloat(returnRate) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {parseFloat(returnRate) >= 0 ? '+' : ''}{returnRate}%
+                          </td>
+                          <td className="px-4 py-3 text-center text-lg">
+                            {item.isCorrect ? '✅' : '❌'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg border border-gray-200 p-6 flex flex-col items-center justify-center">
+              <h3 className="text-base font-semibold text-gray-900 mb-4 self-start">적중률 분포</h3>
+              <ResponsiveContainer width="100%" height={180}>
+                <RechartsPie>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={45}
+                    outerRadius={75}
+                    dataKey="value"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={PIE_COLORS[index]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </RechartsPie>
+              </ResponsiveContainer>
+              <div className="flex gap-4 mt-2 text-xs text-gray-600">
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" />적중
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded-full bg-red-400 inline-block" />미적중
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="text-sm font-medium text-blue-900 mb-1">🚧 기능 준비 중</div>
+            <ul className="text-xs text-blue-800 space-y-1">
+              <li>• AI 분석 시 signal(추가매수/매도/보유)을 함께 저장하는 기능 개발 예정</li>
+              <li>• 분석일로부터 30일 후 가격을 자동 조회하여 적중 여부를 판단합니다</li>
+              <li>• 팀원과 논의 후 백엔드 연동 및 실제 데이터로 교체 예정</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="bg-white border-b border-gray-200">
@@ -1084,6 +1227,17 @@ React.useEffect(() => {
               AI 분석
             </button>
             <button
+              onClick={() => setCurrentPage('ai-performance')}
+              className={`px-5 py-2.5 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                currentPage === 'ai-performance'
+                  ? 'bg-slate-900 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Trophy className="w-4 h-4" />
+              AI 성과
+            </button>
+            <button
               onClick={() => setCurrentPage('mypage')}
               className={`px-5 py-2.5 rounded-lg font-medium transition-all flex items-center gap-2 ${
                 currentPage === 'mypage'
@@ -1102,6 +1256,7 @@ React.useEffect(() => {
         {currentPage === 'input' && renderInputPage()}
         {currentPage === 'chart' && renderChartPage()}
         {currentPage === 'analysis' && renderAnalysisPage()}
+        {currentPage === 'ai-performance' && renderAiPerformancePage()}
         {currentPage === 'mypage' && renderMyPage()}
       </div>
     </div>
