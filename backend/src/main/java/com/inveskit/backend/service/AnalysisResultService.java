@@ -23,16 +23,25 @@ public class AnalysisResultService {
     private final StockPriceRepository stockPriceRepository;
 
     @Transactional
-    public AnalysisResult save(String stockName, String stockCode, String signal, Double priceAtAnalysis) {
+    public AnalysisResult save(String stockName, String stockCode, String signal,
+                               Double priceAtAnalysis, LocalDate lastTradeDate) {
+        LocalDate evalDate = lastTradeDate.plusDays(30);
         AnalysisResult result = AnalysisResult.builder()
                 .stockName(stockName)
                 .stockCode(stockCode)
                 .signal(signal)
                 .priceAtAnalysis(priceAtAnalysis)
                 .analysisDate(LocalDate.now())
-                .evaluationDate(LocalDate.now().plusDays(30))
+                .evaluationDate(evalDate)
                 .build();
-        return analysisResultRepository.save(result);
+        AnalysisResult saved = analysisResultRepository.save(result);
+
+        // 평가일이 이미 지났으면 즉시 평가
+        if (!evalDate.isAfter(LocalDate.now())) {
+            evaluatePending();
+        }
+
+        return saved;
     }
 
     @Transactional
