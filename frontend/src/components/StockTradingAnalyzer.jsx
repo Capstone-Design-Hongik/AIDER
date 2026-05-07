@@ -1112,16 +1112,6 @@ React.useEffect(() => {
             </div>
           </div>
         </div>
-
-        {/* 다음 단계 안내 */}
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-          <div className="text-sm font-medium text-amber-900 mb-2">📌 분석 결과 활용 팁</div>
-          <ul className="text-xs text-amber-800 space-y-1">
-            <li>• AI 조언을 참고하여 다음 투자 전략을 수립하세요</li>
-            <li>• 여러 전략(볼린저 밴드, 추세추종, 외부 전략)으로 비교 분석해보세요</li>
-            <li>• 정기적으로 거래 내역을 분석하여 투자 습관을 개선하세요</li>
-          </ul>
-        </div>
       </div>
     ) : (
       <div className="bg-white rounded-lg border border-gray-200 p-6">
