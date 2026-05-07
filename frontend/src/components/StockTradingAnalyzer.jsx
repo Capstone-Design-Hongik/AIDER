@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, BarChart3, Plus, Trash2, AlertCircle, FileText, Activity, User, PieChart, Download, Bookmark, Trophy, Pencil, X } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceDot, PieChart as RechartsPie, Pie, Cell } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceDot, PieChart as RechartsPie, Pie, Cell, AreaChart, Area } from 'recharts';
 import stockApi from '../api/stockApi';
 
 const StockTradingAnalyzer = () => {
@@ -33,6 +33,13 @@ const StockTradingAnalyzer = () => {
   const [chartError, setChartError] = useState(null);
   const [currentPrices, setCurrentPrices] = useState({});
   const [mypagePricesLoading, setMypagePricesLoading] = useState(false);
+  const [priceHistories, setPriceHistories] = useState({});
+  const [portfolioTimelineLoading, setPortfolioTimelineLoading] = useState(false);
+
+  const stockNamesKey = React.useMemo(
+    () => [...new Set(trades.map(t => t.stockName))].sort().join(','),
+    [trades]
+  );
 
   const [performanceData, setPerformanceData] = useState([]);
   const [performanceLoading, setPerformanceLoading] = useState(false);
@@ -116,48 +123,53 @@ React.useEffect(() => {
   fetchData();
 }, [currentPage, chartSelectedStock, trades]);
 
-// 3. 마이페이지 진입 시 보유 종목 현재 주가 조회
+// 3. 마이페이지 진입 시 주가 이력 조회 (현재가 + 타임라인용)
 React.useEffect(() => {
-  const fetchCurrentPrices = async () => {
+  const fetchMyPageData = async () => {
     if (currentPage !== 'mypage' || trades.length === 0) return;
 
     const heldStocks = {};
     trades.forEach(t => {
       if (!heldStocks[t.stockName]) heldStocks[t.stockName] = { buy: 0, sell: 0 };
-      if (t.tradeType === 'buy') heldStocks[t.stockName].buy += parseInt(t.quantity);
-      else heldStocks[t.stockName].sell += parseInt(t.quantity);
+      if (t.tradeType === 'buy') heldStocks[t.stockName].buy += parseInt(t.quantity, 10);
+      else heldStocks[t.stockName].sell += parseInt(t.quantity, 10);
     });
 
-    const stocksToFetch = Object.keys(heldStocks).filter(
-      name => heldStocks[name].buy - heldStocks[name].sell > 0
-    );
-
-    if (stocksToFetch.length === 0) return;
+    const allStocks = [...new Set(trades.map(t => t.stockName))];
 
     setMypagePricesLoading(true);
+    setPortfolioTimelineLoading(true);
     try {
       const results = await Promise.all(
-        stocksToFetch.map(name =>
+        allStocks.map(name =>
           stockApi.getStockPrices(name, null).then(res => ({
             name,
-            price: res.prices && res.prices.length > 0
-              ? res.prices[res.prices.length - 1].closePrice
-              : null
-          })).catch(() => ({ name, price: null }))
+            prices: res.prices || []
+          })).catch(() => ({ name, prices: [] }))
         )
       );
       const priceMap = {};
-      results.forEach(({ name, price }) => { priceMap[name] = price; });
+      const historyMap = {};
+      results.forEach(({ name, prices }) => {
+        historyMap[name] = prices;
+        const isHeld = (heldStocks[name]?.buy || 0) - (heldStocks[name]?.sell || 0) > 0;
+        if (isHeld && prices.length > 0) {
+          priceMap[name] = prices[prices.length - 1].closePrice;
+        }
+      });
       setCurrentPrices(priceMap);
-    } catch {
-      // 조회 실패 시 빈 상태 유지
+      setPriceHistories(historyMap);
+    } catch (error) {
+      console.error('마이페이지 가격 조회 실패:', error);
     } finally {
       setMypagePricesLoading(false);
+      setPortfolioTimelineLoading(false);
     }
   };
 
-  fetchCurrentPrices();
-}, [currentPage, trades]);
+  fetchMyPageData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [currentPage, stockNamesKey]);
 
   // 거래 목록 변경 시 종목 자동 선택 (단일 종목이면 바로 선택)
   React.useEffect(() => {
@@ -168,6 +180,61 @@ React.useEffect(() => {
       setSelectedStock(prev => unique.includes(prev) ? prev : '');
     }
   }, [trades]);
+
+  const portfolioTimeline = React.useMemo(() => {
+    const stockNames = Object.keys(priceHistories);
+    if (stockNames.length === 0) return [];
+
+    const allDatesSet = new Set();
+    stockNames.forEach(name => {
+      (priceHistories[name] || []).forEach(p => allDatesSet.add(p.date));
+    });
+    const sortedDates = [...allDatesSet].sort();
+
+    const priceLookup = {};
+    stockNames.forEach(name => {
+      priceLookup[name] = {};
+      let lastPrice = null;
+      sortedDates.forEach(date => {
+        const entry = (priceHistories[name] || []).find(p => p.date === date);
+        if (entry) lastPrice = parseFloat(entry.closePrice);
+        if (lastPrice != null) priceLookup[name][date] = lastPrice;
+      });
+    });
+
+    const sortedTrades = [...trades].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const firstTradeDate = sortedTrades[0]?.date;
+    if (!firstTradeDate) return [];
+
+    return sortedDates
+      .filter(date => date >= firstTradeDate)
+      .map(date => {
+        const holdingsOnDate = {};
+        sortedTrades.forEach(t => {
+          if (t.date <= date) {
+            const name = t.stockName;
+            if (!holdingsOnDate[name]) holdingsOnDate[name] = 0;
+            holdingsOnDate[name] += t.tradeType === 'buy'
+              ? (parseInt(t.quantity, 10) || 0)
+              : -(parseInt(t.quantity, 10) || 0);
+          }
+        });
+
+        let totalValue = 0;
+        stockNames.forEach(name => {
+          const qty = Math.max(0, holdingsOnDate[name] || 0);
+          const price = priceLookup[name][date];
+          if (qty > 0 && price) totalValue += qty * price;
+        });
+
+        return {
+          date,
+          displayDate: new Date(date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }),
+          totalValue: Math.round(totalValue)
+        };
+      })
+      .filter(d => d.totalValue > 0);
+  }, [priceHistories, trades]);
 
   const handleStockNameChange = async (value) => {
   setCurrentTrade({...currentTrade, stockName: value});
@@ -1174,6 +1241,51 @@ React.useEffect(() => {
               </div>
             )}
           </div>
+
+          {(portfolioTimelineLoading || portfolioTimeline.length > 0) && (
+            <div className="bg-white rounded-lg border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5" />
+                포트폴리오 가치 타임라인
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">최근 60일간 보유 자산 총액 변화</p>
+              {portfolioTimelineLoading ? (
+                <div className="flex items-center justify-center h-64 text-gray-400">조회 중...</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={280}>
+                  <AreaChart data={portfolioTimeline} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                    <defs>
+                      <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#0f172a" stopOpacity={0.12} />
+                        <stop offset="95%" stopColor="#0f172a" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="displayDate" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
+                    <YAxis
+                      tickFormatter={v => `${Math.round(v / 10000).toLocaleString()}만`}
+                      tick={{ fontSize: 11 }}
+                      width={65}
+                    />
+                    <Tooltip
+                      formatter={(value) => [`${value.toLocaleString()}원`, '포트폴리오 가치']}
+                      labelStyle={{ color: '#374151' }}
+                      contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="totalValue"
+                      stroke="#0f172a"
+                      strokeWidth={2}
+                      fill="url(#portfolioGradient)"
+                      dot={false}
+                      activeDot={{ r: 4, fill: '#0f172a' }}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          )}
 
           <div className="bg-white rounded-lg border border-gray-200 p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
