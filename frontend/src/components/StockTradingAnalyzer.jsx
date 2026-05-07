@@ -16,6 +16,7 @@ const StockTradingAnalyzer = () => {
 
   const [searchResults, setSearchResults] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [searchKeyword, setSearchKeyword] = useState('');
 
   const [strategy, setStrategy] = useState('bollinger');
   const [externalUrl, setExternalUrl] = useState('');
@@ -308,22 +309,29 @@ React.useEffect(() => {
     }));
   }, [priceHistories, trades, indexPrices]);
 
-  const handleStockNameChange = async (value) => {
-  setCurrentTrade({...currentTrade, stockName: value});
-  
-  if (value.length > 0) {
-    try {
-      const results = await stockApi.searchStocks(value);
-      setSearchResults(results);
-      setShowDropdown(true);
-    } catch (error) {
-      console.error('검색 실패:', error);
+  useEffect(() => {
+    if (searchKeyword.length === 0) {
       setSearchResults([]);
+      setShowDropdown(false);
+      return;
     }
-  } else {
-    setSearchResults([]);
-    setShowDropdown(false);
-    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const results = await stockApi.searchStocks(searchKeyword);
+        setSearchResults(results);
+        setShowDropdown(true);
+      } catch (error) {
+        setSearchResults([]);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchKeyword]);
+
+  const handleStockNameChange = (value) => {
+    setCurrentTrade({...currentTrade, stockName: value});
+    setSearchKeyword(value);
   };
 
   const selectStock = (stockName) => {
