@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, BarChart3, Plus, Trash2, AlertCircle, FileText, Activity, User, PieChart, Download, Bookmark, Trophy, Pencil, X } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceDot, PieChart as RechartsPie, Pie, Cell, AreaChart, Area } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceDot, PieChart as RechartsPie, Pie, Cell } from 'recharts';
 import stockApi from '../api/stockApi';
 
 const StockTradingAnalyzer = () => {
@@ -35,6 +35,7 @@ const StockTradingAnalyzer = () => {
   const [mypagePricesLoading, setMypagePricesLoading] = useState(false);
   const [priceHistories, setPriceHistories] = useState({});
   const [portfolioTimelineLoading, setPortfolioTimelineLoading] = useState(false);
+  const [indexPrices, setIndexPrices] = useState({ KOSPI: [], KOSDAQ: [] });
 
   const stockNamesKey = React.useMemo(
     () => [...new Set(trades.map(t => t.stockName))].sort().join(','),
@@ -169,6 +170,12 @@ React.useEffect(() => {
       });
       setCurrentPrices(priceMap);
       setPriceHistories(historyMap);
+
+      const [kospiData, kosdaqData] = await Promise.all([
+        stockApi.getIndexPrices('KOSPI'),
+        stockApi.getIndexPrices('KOSDAQ'),
+      ]);
+      setIndexPrices({ KOSPI: kospiData, KOSDAQ: kosdaqData });
     } catch (error) {
       console.error('마이페이지 가격 조회 실패:', error);
     } finally {
@@ -212,11 +219,25 @@ React.useEffect(() => {
       });
     });
 
+    // 지수 forward-fill lookup 생성
+    const buildIndexLookup = (data) => {
+      const lookup = {};
+      let last = null;
+      sortedDates.forEach(date => {
+        const entry = data.find(p => p.date === date);
+        if (entry) last = parseFloat(entry.closePrice);
+        if (last != null) lookup[date] = last;
+      });
+      return lookup;
+    };
+    const kospiLookup = buildIndexLookup(indexPrices.KOSPI);
+    const kosdaqLookup = buildIndexLookup(indexPrices.KOSDAQ);
+
     const sortedTrades = [...trades].sort((a, b) => new Date(a.date) - new Date(b.date));
     const firstTradeDate = sortedTrades[0]?.date;
     if (!firstTradeDate) return [];
 
-    return sortedDates
+    const filtered = sortedDates
       .filter(date => date >= firstTradeDate)
       .map(date => {
         const holdingsOnDate = {};
@@ -240,11 +261,27 @@ React.useEffect(() => {
         return {
           date,
           displayDate: new Date(date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }),
-          totalValue: Math.round(totalValue)
+          totalValue: Math.round(totalValue),
+          kospi: kospiLookup[date] ?? null,
+          kosdaq: kosdaqLookup[date] ?? null,
         };
       })
       .filter(d => d.totalValue > 0);
-  }, [priceHistories, trades]);
+
+    if (filtered.length === 0) return [];
+
+    // 첫 날 기준 % 변동률로 정규화
+    const baseValue   = filtered[0].totalValue;
+    const baseKospi   = filtered[0].kospi;
+    const baseKosdaq  = filtered[0].kosdaq;
+
+    return filtered.map(d => ({
+      ...d,
+      portfolioReturn: parseFloat(((d.totalValue - baseValue) / baseValue * 100).toFixed(2)),
+      kospiReturn:  baseKospi  && d.kospi  ? parseFloat(((d.kospi  - baseKospi)  / baseKospi  * 100).toFixed(2)) : null,
+      kosdaqReturn: baseKosdaq && d.kosdaq ? parseFloat(((d.kosdaq - baseKosdaq) / baseKosdaq * 100).toFixed(2)) : null,
+    }));
+  }, [priceHistories, trades, indexPrices]);
 
   const handleStockNameChange = async (value) => {
   setCurrentTrade({...currentTrade, stockName: value});
@@ -1261,42 +1298,38 @@ React.useEffect(() => {
             <div className="bg-white rounded-lg border border-gray-200 p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
                 <TrendingUp className="w-5 h-5" />
-                포트폴리오 가치 타임라인
+                포트폴리오 vs 시장 벤치마크
               </h3>
-              <p className="text-sm text-gray-500 mb-4">최근 60일간 보유 자산 총액 변화</p>
+              <p className="text-sm text-gray-500 mb-4">첫 거래일 대비 수익률 비교 (%)</p>
               {portfolioTimelineLoading ? (
                 <div className="flex items-center justify-center h-64 text-gray-400">조회 중...</div>
               ) : (
-                <ResponsiveContainer width="100%" height={280}>
-                  <AreaChart data={portfolioTimeline} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
-                    <defs>
-                      <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#0f172a" stopOpacity={0.12} />
-                        <stop offset="95%" stopColor="#0f172a" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={portfolioTimeline} margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                     <XAxis dataKey="displayDate" tick={{ fontSize: 11 }} interval="preserveStartEnd" />
                     <YAxis
-                      tickFormatter={v => `${Math.round(v / 10000).toLocaleString()}만`}
+                      tickFormatter={v => `${v > 0 ? '+' : ''}${v}%`}
                       tick={{ fontSize: 11 }}
-                      width={65}
+                      width={55}
                     />
                     <Tooltip
-                      formatter={(value) => [`${value.toLocaleString()}원`, '포트폴리오 가치']}
+                      formatter={(value, name) => {
+                        if (value == null) return ['-', name];
+                        const label = name === 'portfolioReturn' ? '내 포트폴리오'
+                          : name === 'kospiReturn' ? 'KOSPI' : 'KOSDAQ';
+                        return [`${value > 0 ? '+' : ''}${value}%`, label];
+                      }}
                       labelStyle={{ color: '#374151' }}
                       contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
                     />
-                    <Area
-                      type="monotone"
-                      dataKey="totalValue"
-                      stroke="#0f172a"
-                      strokeWidth={2}
-                      fill="url(#portfolioGradient)"
-                      dot={false}
-                      activeDot={{ r: 4, fill: '#0f172a' }}
+                    <Legend
+                      formatter={v => v === 'portfolioReturn' ? '내 포트폴리오' : v === 'kospiReturn' ? 'KOSPI' : 'KOSDAQ'}
                     />
-                  </AreaChart>
+                    <Line type="monotone" dataKey="portfolioReturn" stroke="#0f172a" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} connectNulls />
+                    <Line type="monotone" dataKey="kospiReturn"     stroke="#3b82f6" strokeWidth={1.5} dot={false} activeDot={{ r: 3 }} strokeDasharray="4 2" connectNulls />
+                    <Line type="monotone" dataKey="kosdaqReturn"    stroke="#8b5cf6" strokeWidth={1.5} dot={false} activeDot={{ r: 3 }} strokeDasharray="4 2" connectNulls />
+                  </LineChart>
                 </ResponsiveContainer>
               )}
             </div>

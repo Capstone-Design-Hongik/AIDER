@@ -231,6 +231,17 @@ const stockApi = {
       console.error('전략 삭제 실패:', error);
       throw error;
     }
+  },
+
+  // ========== Index APIs ==========
+  getIndexPrices: async (name) => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/stocks/index`, { params: { name } });
+      return response.data;
+    } catch (error) {
+      console.error(`${name} 지수 조회 실패:`, error);
+      return [];
+    }
   }
 };
 

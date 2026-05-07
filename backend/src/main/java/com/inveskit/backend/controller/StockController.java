@@ -1,5 +1,7 @@
 package com.inveskit.backend.controller;
 
+import com.inveskit.backend.client.StockPriceData;
+import com.inveskit.backend.client.YahooFinanceClient;
 import com.inveskit.backend.dto.StockPriceResponse;
 import com.inveskit.backend.service.StockInfoService;
 import com.inveskit.backend.service.StockPriceService;
@@ -10,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/stocks")
@@ -19,6 +22,7 @@ public class StockController {
 
     private final StockPriceService stockPriceService;
     private final StockInfoService stockInfoService;
+    private final YahooFinanceClient yahooFinanceClient;
 
     // GET /api/stocks/prices?stockName=삼성전자&endDate=2024-12-04
     @GetMapping("/prices")
@@ -96,6 +100,27 @@ public class StockController {
         log.info("KRX 종목 동기화 수동 트리거");
         int count = stockInfoService.syncFromKrx();
         return ResponseEntity.ok(String.format("KRX 종목 동기화 완료: %d개", count));
+    }
+
+    // 시장 지수 데이터 조회 (KOSPI / KOSDAQ)
+    // GET /api/stocks/index?name=KOSPI
+    @GetMapping("/index")
+    public ResponseEntity<List<Map<String, Object>>> getIndexPrices(
+            @RequestParam String name,
+            @RequestParam(required = false) LocalDate endDate
+    ) {
+        if (endDate == null) endDate = LocalDate.now();
+        String symbol = name.equalsIgnoreCase("KOSPI") ? "^KS11" : "^KQ11";
+        List<StockPriceData> prices = yahooFinanceClient.fetchStockPrices(symbol, endDate.minusDays(60), endDate);
+        List<Map<String, Object>> result = prices.stream()
+                .map(p -> {
+                    Map<String, Object> item = new java.util.LinkedHashMap<>();
+                    item.put("date", p.getDate().toString());
+                    item.put("closePrice", p.getClosePrice());
+                    return item;
+                })
+                .collect(java.util.stream.Collectors.toList());
+        return ResponseEntity.ok(result);
     }
 
     // stock_info 테이블 종목 수 확인
