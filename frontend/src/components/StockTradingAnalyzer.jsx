@@ -45,7 +45,7 @@ const StockTradingAnalyzer = () => {
   const [performanceLoading, setPerformanceLoading] = useState(false);
 
   useEffect(() => {
-    if (currentPage === 'ai-performance') {
+    if (currentPage === 'ai-performance' || currentPage === 'mypage') {
       setPerformanceLoading(true);
       stockApi.getAiPerformance()
         .then(data => setPerformanceData(data))
@@ -1354,6 +1354,75 @@ React.useEffect(() => {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-lg border border-gray-200 p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1 flex items-center gap-2">
+              <Activity className="w-5 h-5" />
+              AI 분석 이력
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">지금까지 실행한 AI 분석 내역</p>
+
+            {performanceLoading ? (
+              <div className="text-center py-8 text-gray-400 text-sm">불러오는 중...</div>
+            ) : performanceData.length === 0 ? (
+              <div className="text-center py-8 text-gray-400">
+                <Activity className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">AI 분석 이력이 없습니다</p>
+                <p className="text-xs mt-1">AI 분석 탭에서 분석을 실행해보세요</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="text-left py-2 pr-4 font-medium text-gray-500">종목</th>
+                      <th className="text-left py-2 pr-4 font-medium text-gray-500">분석일</th>
+                      <th className="text-left py-2 pr-4 font-medium text-gray-500">신호</th>
+                      <th className="text-right py-2 pr-4 font-medium text-gray-500">분석 당시 가격</th>
+                      <th className="text-center py-2 font-medium text-gray-500">결과</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...performanceData]
+                      .sort((a, b) => new Date(b.analysisDate) - new Date(a.analysisDate))
+                      .slice(0, 10)
+                      .map(item => (
+                        <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50">
+                          <td className="py-2 pr-4 font-medium text-gray-900">{item.stockName}</td>
+                          <td className="py-2 pr-4 text-gray-500">{item.analysisDate}</td>
+                          <td className="py-2 pr-4">
+                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                              item.signal === 'buy'  ? 'bg-emerald-100 text-emerald-800' :
+                              item.signal === 'sell' ? 'bg-red-100 text-red-800' :
+                                                       'bg-blue-100 text-blue-800'
+                            }`}>
+                              {item.signal === 'buy' ? '추가매수' : item.signal === 'sell' ? '매도' : '보유'}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-4 text-right text-gray-700">
+                            {item.priceAtAnalysis?.toLocaleString()}원
+                          </td>
+                          <td className="py-2 text-center">
+                            {item.isCorrect === null
+                              ? <span className="text-gray-400 text-xs">평가 대기</span>
+                              : item.isCorrect
+                                ? <span className="text-emerald-600 font-medium">✓ 적중</span>
+                                : <span className="text-red-500 font-medium">✗ 미적중</span>
+                            }
+                          </td>
+                        </tr>
+                      ))
+                    }
+                  </tbody>
+                </table>
+                {performanceData.length > 10 && (
+                  <p className="text-xs text-gray-400 text-right mt-2">
+                    최근 10건 표시 · 전체 {performanceData.length}건은 AI 성과 탭에서 확인
+                  </p>
+                )}
               </div>
             )}
           </div>
