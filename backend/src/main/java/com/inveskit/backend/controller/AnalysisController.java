@@ -112,7 +112,10 @@ public class AnalysisController {
             String stockCode = tradeInfos.get(0).getStockCode();
 
             if (latestPrice != null && response.getSignal() != null) {
-                analysisResultService.save(stockName, stockCode, response.getSignal(), latestPrice, latestTradeDate);
+                analysisResultService.save(
+                        stockName, stockCode, response.getSignal(), latestPrice, latestTradeDate,
+                        requestDto.getStrategy(), response.getAdvice(), response.getEvaluation(), response.getTotalScore()
+                );
                 log.info("분석 결과 저장 완료 - {}, signal: {}, price: {}, lastTradeDate: {}",
                         stockName, response.getSignal(), latestPrice, latestTradeDate);
             }

@@ -1367,33 +1367,25 @@ React.useEffect(() => {
 
             {performanceLoading ? (
               <div className="text-center py-8 text-gray-400 text-sm">불러오는 중...</div>
-            ) : performanceData.length === 0 ? (
+            ) : performanceData.filter(d => d.advice).length === 0 ? (
               <div className="text-center py-8 text-gray-400">
                 <Activity className="w-12 h-12 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">AI 분석 이력이 없습니다</p>
                 <p className="text-xs mt-1">AI 분석 탭에서 분석을 실행해보세요</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="text-left py-2 pr-4 font-medium text-gray-500">종목</th>
-                      <th className="text-left py-2 pr-4 font-medium text-gray-500">분석일</th>
-                      <th className="text-left py-2 pr-4 font-medium text-gray-500">신호</th>
-                      <th className="text-right py-2 pr-4 font-medium text-gray-500">분석 당시 가격</th>
-                      <th className="text-center py-2 font-medium text-gray-500">결과</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[...performanceData]
-                      .sort((a, b) => new Date(b.analysisDate) - new Date(a.analysisDate))
-                      .slice(0, 10)
-                      .map(item => (
-                        <tr key={item.id} className="border-b border-gray-50 hover:bg-gray-50">
-                          <td className="py-2 pr-4 font-medium text-gray-900">{item.stockName}</td>
-                          <td className="py-2 pr-4 text-gray-500">{item.analysisDate}</td>
-                          <td className="py-2 pr-4">
+              <div className="space-y-3">
+                {[...performanceData]
+                  .filter(d => d.advice)
+                  .sort((a, b) => new Date(b.analysisDate) - new Date(a.analysisDate))
+                  .slice(0, 5)
+                  .map(item => {
+                    const strategyLabel = { bollinger: '볼린저 밴드', trend: '트렌드', external: '외부 전략' };
+                    return (
+                      <div key={item.id} className="border border-gray-100 rounded-lg p-4 bg-gray-50">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-gray-900">{item.stockName}</span>
                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                               item.signal === 'buy'  ? 'bg-emerald-100 text-emerald-800' :
                               item.signal === 'sell' ? 'bg-red-100 text-red-800' :
@@ -1401,26 +1393,29 @@ React.useEffect(() => {
                             }`}>
                               {item.signal === 'buy' ? '추가매수' : item.signal === 'sell' ? '매도' : '보유'}
                             </span>
-                          </td>
-                          <td className="py-2 pr-4 text-right text-gray-700">
-                            {item.priceAtAnalysis?.toLocaleString()}원
-                          </td>
-                          <td className="py-2 text-center">
-                            {item.isCorrect === null
-                              ? <span className="text-gray-400 text-xs">평가 대기</span>
-                              : item.isCorrect
-                                ? <span className="text-emerald-600 font-medium">✓ 적중</span>
-                                : <span className="text-red-500 font-medium">✗ 미적중</span>
-                            }
-                          </td>
-                        </tr>
-                      ))
-                    }
-                  </tbody>
-                </table>
-                {performanceData.length > 10 && (
-                  <p className="text-xs text-gray-400 text-right mt-2">
-                    최근 10건 표시 · 전체 {performanceData.length}건은 AI 성과 탭에서 확인
+                            {item.totalScore != null && (
+                              <span className="text-xs text-gray-500">{Math.round(item.totalScore)}점</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-gray-400">
+                            <span>{strategyLabel[item.strategyType] || item.strategyType}</span>
+                            <span>·</span>
+                            <span>{item.analysisDate}</span>
+                          </div>
+                        </div>
+                        {item.advice && (
+                          <p className="text-sm text-gray-700 leading-relaxed mb-2">{item.advice}</p>
+                        )}
+                        {item.evaluation && (
+                          <p className="text-xs text-gray-500 leading-relaxed border-t border-gray-200 pt-2 mt-2">{item.evaluation}</p>
+                        )}
+                      </div>
+                    );
+                  })
+                }
+                {performanceData.filter(d => d.advice).length > 5 && (
+                  <p className="text-xs text-gray-400 text-right">
+                    최근 5건 표시 · 전체 {performanceData.filter(d => d.advice).length}건
                   </p>
                 )}
               </div>

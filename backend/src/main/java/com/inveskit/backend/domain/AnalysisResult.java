@@ -39,6 +39,16 @@ public class AnalysisResult {
 
     private Boolean isCorrect; // 적중 여부
 
+    private String strategyType; // bollinger / trend / external
+
+    @Column(columnDefinition = "TEXT")
+    private String advice; // AI 조언 내용
+
+    @Column(columnDefinition = "TEXT")
+    private String evaluation; // AI 평가 내용
+
+    private Double totalScore; // 종합 점수
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

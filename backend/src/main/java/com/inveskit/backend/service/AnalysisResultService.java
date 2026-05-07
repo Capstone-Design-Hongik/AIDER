@@ -24,7 +24,8 @@ public class AnalysisResultService {
 
     @Transactional
     public AnalysisResult save(String stockName, String stockCode, String signal,
-                               Double priceAtAnalysis, LocalDate lastTradeDate) {
+                               Double priceAtAnalysis, LocalDate lastTradeDate,
+                               String strategyType, String advice, String evaluation, Double totalScore) {
         LocalDate evalDate = lastTradeDate.plusDays(30);
         AnalysisResult result = AnalysisResult.builder()
                 .stockName(stockName)
@@ -33,6 +34,10 @@ public class AnalysisResultService {
                 .priceAtAnalysis(priceAtAnalysis)
                 .analysisDate(LocalDate.now())
                 .evaluationDate(evalDate)
+                .strategyType(strategyType)
+                .advice(advice)
+                .evaluation(evaluation)
+                .totalScore(totalScore)
                 .build();
         AnalysisResult saved = analysisResultRepository.save(result);
 
@@ -104,6 +109,10 @@ public class AnalysisResultService {
         map.put("evaluationDate", r.getEvaluationDate().toString());
         map.put("priceAtEvaluation", r.getPriceAtEvaluation());
         map.put("isCorrect", r.getIsCorrect());
+        map.put("strategyType", r.getStrategyType());
+        map.put("advice", r.getAdvice());
+        map.put("evaluation", r.getEvaluation());
+        map.put("totalScore", r.getTotalScore());
         return map;
     }
 }
