@@ -200,6 +200,37 @@ const stockApi = {
       console.error('분석 결과 삭제 실패:', error);
       throw error;
     }
+  },
+
+  // ========== Strategy APIs ==========
+
+  getSavedStrategies: async () => {
+    try {
+      const response = await axios.get(`${API_BASE_URL}/strategies`);
+      return response.data;
+    } catch (error) {
+      console.error('전략 조회 실패:', error);
+      throw error;
+    }
+  },
+
+  saveStrategy: async (url) => {
+    try {
+      const response = await axios.post(`${API_BASE_URL}/strategies`, { url });
+      return response.data;
+    } catch (error) {
+      console.error('전략 저장 실패:', error);
+      throw error;
+    }
+  },
+
+  deleteStrategy: async (id) => {
+    try {
+      await axios.delete(`${API_BASE_URL}/strategies/${id}`);
+    } catch (error) {
+      console.error('전략 삭제 실패:', error);
+      throw error;
+    }
   }
 };
 
