@@ -45,6 +45,7 @@ const StockTradingAnalyzer = () => {
 
   const [performanceData, setPerformanceData] = useState([]);
   const [performanceLoading, setPerformanceLoading] = useState(false);
+  const [expandedItemId, setExpandedItemId] = useState(null);
 
   useEffect(() => {
     if (currentPage === 'ai-performance' || currentPage === 'mypage') {
@@ -295,14 +296,16 @@ React.useEffect(() => {
 
     if (filtered.length === 0) return [];
 
-    // 지수는 첫 날 기준 정규화, 포트폴리오는 누적 투자금 대비 수익률
     const baseKospi  = filtered[0].kospi;
     const baseKosdaq = filtered[0].kosdaq;
+    const basePortfolioReturn = filtered[0].totalBought > 0
+      ? (filtered[0].totalValue + filtered[0].cumulativeRealizedPL - filtered[0].totalBought) / filtered[0].totalBought * 100
+      : 0;
 
     return filtered.map(d => ({
       ...d,
       portfolioReturn: d.totalBought > 0
-        ? parseFloat(((d.totalValue + d.cumulativeRealizedPL - d.totalBought) / d.totalBought * 100).toFixed(2))
+        ? parseFloat(((d.totalValue + d.cumulativeRealizedPL - d.totalBought) / d.totalBought * 100 - basePortfolioReturn).toFixed(2))
         : 0,
       kospiReturn:  baseKospi  && d.kospi  ? parseFloat(((d.kospi  - baseKospi)  / baseKospi  * 100).toFixed(2)) : null,
       kosdaqReturn: baseKosdaq && d.kosdaq ? parseFloat(((d.kosdaq - baseKosdaq) / baseKosdaq * 100).toFixed(2)) : null,
@@ -1423,16 +1426,20 @@ React.useEffect(() => {
                 <p className="text-xs mt-1">AI 분석 탭에서 분석을 실행해보세요</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {[...performanceData]
                   .filter(d => d.advice)
                   .sort((a, b) => new Date(b.analysisDate) - new Date(a.analysisDate))
                   .slice(0, 5)
                   .map(item => {
                     const strategyLabel = { bollinger: '볼린저 밴드', trend: '트렌드', external: '외부 전략' };
+                    const isExpanded = expandedItemId === item.id;
                     return (
-                      <div key={item.id} className="border border-gray-100 rounded-lg p-4 bg-gray-50">
-                        <div className="flex items-center justify-between mb-3">
+                      <div key={item.id} className="border border-gray-100 rounded-lg bg-gray-50 overflow-hidden">
+                        <button
+                          onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
+                          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-100 transition-colors"
+                        >
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-gray-900">{item.stockName}</span>
                             <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
@@ -1450,13 +1457,18 @@ React.useEffect(() => {
                             <span>{strategyLabel[item.strategyType] || item.strategyType}</span>
                             <span>·</span>
                             <span>{item.analysisDate}</span>
+                            <span className="ml-1 text-gray-400">{isExpanded ? '▲' : '▼'}</span>
                           </div>
-                        </div>
-                        {item.advice && (
-                          <p className="text-sm text-gray-700 leading-relaxed mb-2">{item.advice}</p>
-                        )}
-                        {item.evaluation && (
-                          <p className="text-xs text-gray-500 leading-relaxed border-t border-gray-200 pt-2 mt-2">{item.evaluation}</p>
+                        </button>
+                        {isExpanded && (
+                          <div className="px-4 pb-4 border-t border-gray-200">
+                            {item.advice && (
+                              <p className="text-sm text-gray-700 leading-relaxed mt-3">{item.advice}</p>
+                            )}
+                            {item.evaluation && (
+                              <p className="text-xs text-gray-500 leading-relaxed border-t border-gray-200 pt-2 mt-2">{item.evaluation}</p>
+                            )}
+                          </div>
                         )}
                       </div>
                     );
