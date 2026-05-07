@@ -416,8 +416,6 @@ React.useEffect(() => {
     
     setAnalysis(response);
     setCurrentPage('analysis');
-    
-    console.log('AI 분석 완료:', response);
   } catch (error) {
     console.error('AI 분석 실패:', error);
     alert('AI 분석에 실패했습니다. 다시 시도해주세요.');
@@ -1716,6 +1714,19 @@ React.useEffect(() => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+
+      {loading && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-slate-900/70 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl px-10 py-10 flex flex-col items-center gap-5 shadow-2xl">
+            <div className="w-14 h-14 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
+            <div className="text-center">
+              <p className="text-lg font-semibold text-gray-900">AI 분석 중입니다</p>
+              <p className="text-sm text-gray-500 mt-1">잠시만 기다려주세요...</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
