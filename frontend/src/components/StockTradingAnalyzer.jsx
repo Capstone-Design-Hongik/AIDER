@@ -55,7 +55,7 @@ const StockTradingAnalyzer = () => {
   }, [currentPage]);
 
 
-  // 1. 컴포넌트 마운트 시 거래 내역 불러오기
+  // 1. 컴포넌트 마운트 시 거래 내역 + 저장된 전략 불러오기
 React.useEffect(() => {
   const loadTrades = async () => {
     try {
@@ -65,8 +65,18 @@ React.useEffect(() => {
       console.error('거래 내역 로딩 실패:', error);
     }
   };
-  
+
+  const loadStrategies = async () => {
+    try {
+      const data = await stockApi.getSavedStrategies();
+      setSavedStrategies(data);
+    } catch (error) {
+      console.error('전략 로딩 실패:', error);
+    }
+  };
+
   loadTrades();
+  loadStrategies();
 }, []);
 
 // 차트 페이지 진입 시 기본 종목 설정
@@ -356,27 +366,32 @@ React.useEffect(() => {
 
 
 
-  const saveStrategy = () => {
-    if (strategy === 'external' && externalUrl) {
-      if (savedStrategies.some(s => s.url === externalUrl)) {
-        setStrategySaveMsg('already');
-        setTimeout(() => setStrategySaveMsg(''), 2500);
-        return;
-      }
-      const newStrategy = {
-        id: Date.now(),
-        type: 'external',
-        url: externalUrl,
-        savedAt: new Date().toISOString().split('T')[0]
-      };
-      setSavedStrategies([...savedStrategies, newStrategy]);
+  const saveStrategy = async () => {
+    if (strategy !== 'external' || !externalUrl) return;
+    if (savedStrategies.some(s => s.url === externalUrl)) {
+      setStrategySaveMsg('already');
+      setTimeout(() => setStrategySaveMsg(''), 2500);
+      return;
+    }
+    try {
+      const saved = await stockApi.saveStrategy(externalUrl);
+      setSavedStrategies([saved, ...savedStrategies]);
       setStrategySaveMsg('ok');
+      setTimeout(() => setStrategySaveMsg(''), 2500);
+    } catch (error) {
+      console.error('전략 저장 실패:', error);
+      setStrategySaveMsg('already');
       setTimeout(() => setStrategySaveMsg(''), 2500);
     }
   };
 
-  const removeSavedStrategy = (id) => {
-    setSavedStrategies(savedStrategies.filter(s => s.id !== id));
+  const removeSavedStrategy = async (id) => {
+    try {
+      await stockApi.deleteStrategy(id);
+      setSavedStrategies(savedStrategies.filter(s => s.id !== id));
+    } catch (error) {
+      console.error('전략 삭제 실패:', error);
+    }
   };
 
   const downloadCSV = () => {
