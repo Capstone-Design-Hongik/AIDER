@@ -5,12 +5,12 @@ const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8080/api
 const stockApi = {
   // ========== Stock APIs ==========
   
-  // 60일 주가 데이터 조회
-  getStockPrices: async (stockName, endDate) => {
+  getStockPrices: async (stockName, endDate, startDate) => {
     try {
       const response = await axios.get(`${API_BASE_URL}/stocks/prices`, {
         params: {
           stockName,
+          startDate: startDate || undefined,
           endDate: endDate || undefined
         }
       });
@@ -234,9 +234,11 @@ const stockApi = {
   },
 
   // ========== Index APIs ==========
-  getIndexPrices: async (name) => {
+  getIndexPrices: async (name, startDate) => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/stocks/index`, { params: { name } });
+      const response = await axios.get(`${API_BASE_URL}/stocks/index`, {
+        params: { name, startDate: startDate || undefined }
+      });
       return response.data;
     } catch (error) {
       console.error(`${name} 지수 조회 실패:`, error);

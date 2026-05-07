@@ -24,9 +24,8 @@ public class StockPriceService {
     private final YahooFinanceClient yahooFinanceClient;
     private final StockInfoService stockInfoService;
 
-    // 특정 종목의 60일 주가 데이터 조회
-    public StockPriceResponse getStockPrices(String stockName, LocalDate endDate) {
-        LocalDate startDate = endDate.minusDays(60);
+    public StockPriceResponse getStockPrices(String stockName, LocalDate startDate, LocalDate endDate) {
+        if (startDate == null) startDate = endDate.minusDays(60);
 
         log.info("Fetching stock prices for {} from {} to {}", stockName, startDate, endDate);
 
