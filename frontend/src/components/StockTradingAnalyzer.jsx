@@ -102,12 +102,9 @@ React.useEffect(() => {
 
       try {
         const stockTrades = trades.filter(t => t.stockName === chartSelectedStock);
-        const latestTradeDate = stockTrades
-          .map(t => t.date)
-          .sort()
-          .reverse()[0];
+        const firstTradeDate = stockTrades.map(t => t.date).sort()[0];
 
-        const response = await stockApi.getStockPrices(chartSelectedStock, latestTradeDate);
+        const response = await stockApi.getStockPrices(chartSelectedStock, null, firstTradeDate);
 
         const tradesByDate = {};
         stockTrades.forEach(t => {
@@ -824,7 +821,7 @@ React.useEffect(() => {
       <div className="max-w-6xl mx-auto">
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">
-            60일 주가 차트
+            주가 차트
           </h2>
 
           {uniqueStocks.length > 1 && (
