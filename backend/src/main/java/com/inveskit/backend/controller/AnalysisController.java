@@ -67,6 +67,7 @@ public class AnalysisController {
 
             StockPriceResponse stockPriceResponse = stockPriceService.getStockPrices(
                     stockName,
+                    null,
                     latestTradeDate
             );
 
