@@ -904,11 +904,6 @@ React.useEffect(() => {
                 </div>
               </div>
 
-              <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                <p className="text-sm text-blue-800">
-                  ✅ 실제 주가 데이터가 표시되고 있습니다! (Yahoo Finance API)
-                </p>
-              </div>
             </>
           ) : null}
         </div>
@@ -1536,16 +1531,6 @@ React.useEffect(() => {
                 분석 결과 다운로드 (PDF)
               </button>
 
-              <div className="pt-4 border-t border-gray-200">
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-                  <div className="text-sm font-medium text-amber-900 mb-2">💡 투자 팁</div>
-                  <ul className="text-xs text-amber-800 space-y-1">
-                    <li>• 정기적으로 거래 내역을 백업하세요</li>
-                    <li>• 전략별 성과를 비교 분석해보세요</li>
-                    <li>• 손절 원칙을 정하고 지키세요</li>
-                  </ul>
-                </div>
-              </div>
             </div>
           </div>
         </div>
