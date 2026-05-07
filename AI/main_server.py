@@ -22,6 +22,21 @@ async def _save_transcript_to_db(vector_db, transcript_result, user_data):
     strategy_name = transcript_result.structure.get("strategy_name", "일반 투자 조언")
     video_id      = transcript_result.structure.get("video_id", "unknown")
 
+    # 동일 video_id가 이미 저장돼 있으면 중복 저장 스킵
+    try:
+        existing = vector_db.collection.get(
+            where={"video_id": {"$eq": video_id}},
+            limit=1,
+        )
+        if existing and existing.get("ids"):
+            print(
+                f"\n[BG] ⏭️  동일 영상 '{video_id}' 이미 존재 → DB 저장 생략 (전략: {strategy_name})",
+                file=sys.stderr,
+            )
+            return
+    except Exception as e:
+        print(f"\n[BG] ⚠️ 중복 체크 실패, 저장 진행: {e}", file=sys.stderr)
+
     documents = []
 
     # 전체 요약
