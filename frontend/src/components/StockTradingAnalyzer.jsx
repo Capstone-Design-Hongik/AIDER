@@ -258,10 +258,34 @@ React.useEffect(() => {
           if (qty > 0 && price) totalValue += qty * price;
         });
 
+        // 해당 날짜까지 누적 매수금액 + 이동평균법 실현손익
+        let totalBought = 0;
+        let cumulativeRealizedPL = 0;
+        const runningAvg = {};
+        sortedTrades.forEach(t => {
+          if (t.date > date) return;
+          const name = t.stockName;
+          const qty = parseInt(t.quantity, 10) || 0;
+          const price = parseFloat(t.price) || 0;
+          if (!runningAvg[name]) runningAvg[name] = { qty: 0, amount: 0 };
+          if (t.tradeType === 'buy') {
+            totalBought += price * qty;
+            runningAvg[name].qty += qty;
+            runningAvg[name].amount += price * qty;
+          } else {
+            const avgPrice = runningAvg[name].qty > 0 ? runningAvg[name].amount / runningAvg[name].qty : 0;
+            cumulativeRealizedPL += (price - avgPrice) * qty;
+            runningAvg[name].qty -= qty;
+            runningAvg[name].amount = runningAvg[name].qty > 0 ? avgPrice * runningAvg[name].qty : 0;
+          }
+        });
+
         return {
           date,
           displayDate: new Date(date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' }),
           totalValue: Math.round(totalValue),
+          totalBought,
+          cumulativeRealizedPL,
           kospi: kospiLookup[date] ?? null,
           kosdaq: kosdaqLookup[date] ?? null,
         };
@@ -270,14 +294,15 @@ React.useEffect(() => {
 
     if (filtered.length === 0) return [];
 
-    // 첫 날 기준 % 변동률로 정규화
-    const baseValue   = filtered[0].totalValue;
-    const baseKospi   = filtered[0].kospi;
-    const baseKosdaq  = filtered[0].kosdaq;
+    // 지수는 첫 날 기준 정규화, 포트폴리오는 누적 투자금 대비 수익률
+    const baseKospi  = filtered[0].kospi;
+    const baseKosdaq = filtered[0].kosdaq;
 
     return filtered.map(d => ({
       ...d,
-      portfolioReturn: parseFloat(((d.totalValue - baseValue) / baseValue * 100).toFixed(2)),
+      portfolioReturn: d.totalBought > 0
+        ? parseFloat(((d.totalValue + d.cumulativeRealizedPL - d.totalBought) / d.totalBought * 100).toFixed(2))
+        : 0,
       kospiReturn:  baseKospi  && d.kospi  ? parseFloat(((d.kospi  - baseKospi)  / baseKospi  * 100).toFixed(2)) : null,
       kosdaqReturn: baseKosdaq && d.kosdaq ? parseFloat(((d.kosdaq - baseKosdaq) / baseKosdaq * 100).toFixed(2)) : null,
     }));
