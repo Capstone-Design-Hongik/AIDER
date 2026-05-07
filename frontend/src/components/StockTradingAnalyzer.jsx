@@ -149,13 +149,14 @@ React.useEffect(() => {
     });
 
     const allStocks = [...new Set(trades.map(t => t.stockName))];
+    const firstTradeDate = [...trades].sort((a, b) => new Date(a.date) - new Date(b.date))[0]?.date;
 
     setMypagePricesLoading(true);
     setPortfolioTimelineLoading(true);
     try {
       const results = await Promise.all(
         allStocks.map(name =>
-          stockApi.getStockPrices(name, null).then(res => ({
+          stockApi.getStockPrices(name, null, firstTradeDate).then(res => ({
             name,
             prices: res.prices || []
           })).catch(() => ({ name, prices: [] }))
@@ -174,8 +175,8 @@ React.useEffect(() => {
       setPriceHistories(historyMap);
 
       const [kospiData, kosdaqData] = await Promise.all([
-        stockApi.getIndexPrices('KOSPI'),
-        stockApi.getIndexPrices('KOSDAQ'),
+        stockApi.getIndexPrices('KOSPI', firstTradeDate),
+        stockApi.getIndexPrices('KOSDAQ', firstTradeDate),
       ]);
       setIndexPrices({ KOSPI: kospiData, KOSDAQ: kosdaqData });
     } catch (error) {

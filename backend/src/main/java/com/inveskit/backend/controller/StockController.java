@@ -24,16 +24,15 @@ public class StockController {
     private final StockInfoService stockInfoService;
     private final YahooFinanceClient yahooFinanceClient;
 
-    // GET /api/stocks/prices?stockName=삼성전자&endDate=2024-12-04
+    // GET /api/stocks/prices?stockName=삼성전자&startDate=2026-02-06&endDate=2026-05-07
     @GetMapping("/prices")
     public ResponseEntity<StockPriceResponse> getStockPrices(
             @RequestParam String stockName,
+            @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate
     ) {
-        if (endDate == null) {
-            endDate = LocalDate.now();
-        }
-        StockPriceResponse response = stockPriceService.getStockPrices(stockName, endDate);
+        if (endDate == null) endDate = LocalDate.now();
+        StockPriceResponse response = stockPriceService.getStockPrices(stockName, startDate, endDate);
         return ResponseEntity.ok(response);
     }
 
@@ -103,15 +102,17 @@ public class StockController {
     }
 
     // 시장 지수 데이터 조회 (KOSPI / KOSDAQ)
-    // GET /api/stocks/index?name=KOSPI
+    // GET /api/stocks/index?name=KOSPI&startDate=2026-02-06
     @GetMapping("/index")
     public ResponseEntity<List<Map<String, Object>>> getIndexPrices(
             @RequestParam String name,
+            @RequestParam(required = false) LocalDate startDate,
             @RequestParam(required = false) LocalDate endDate
     ) {
         if (endDate == null) endDate = LocalDate.now();
+        if (startDate == null) startDate = endDate.minusDays(60);
         String symbol = name.equalsIgnoreCase("KOSPI") ? "^KS11" : "^KQ11";
-        List<StockPriceData> prices = yahooFinanceClient.fetchStockPrices(symbol, endDate.minusDays(60), endDate);
+        List<StockPriceData> prices = yahooFinanceClient.fetchStockPrices(symbol, startDate, endDate);
         List<Map<String, Object>> result = prices.stream()
                 .map(p -> {
                     Map<String, Object> item = new java.util.LinkedHashMap<>();
