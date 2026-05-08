@@ -1434,30 +1434,48 @@ React.useEffect(() => {
                     const isExpanded = expandedItemId === item.id;
                     return (
                       <div key={item.id} className="border border-gray-100 rounded-lg bg-gray-50 overflow-hidden">
-                        <button
-                          onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
-                          className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-gray-100 transition-colors"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-gray-900">{item.stockName}</span>
-                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                              item.signal === 'buy'  ? 'bg-emerald-100 text-emerald-800' :
-                              item.signal === 'sell' ? 'bg-red-100 text-red-800' :
-                                                       'bg-blue-100 text-blue-800'
-                            }`}>
-                              {item.signal === 'buy' ? '추가매수' : item.signal === 'sell' ? '매도' : '보유'}
-                            </span>
-                            {item.totalScore != null && (
-                              <span className="text-xs text-gray-500">{Math.round(item.totalScore)}점</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 text-xs text-gray-400">
-                            <span>{strategyLabel[item.strategyType] || item.strategyType}</span>
-                            <span>·</span>
-                            <span>{item.analysisDate}</span>
-                            <span className="ml-1 text-gray-400">{isExpanded ? '▲' : '▼'}</span>
-                          </div>
-                        </button>
+                        <div className="flex items-center">
+                          <button
+                            onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
+                            className="flex-1 flex items-center justify-between px-4 py-3 text-left hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-gray-900">{item.stockName}</span>
+                              <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                                item.signal === 'buy'  ? 'bg-emerald-100 text-emerald-800' :
+                                item.signal === 'sell' ? 'bg-red-100 text-red-800' :
+                                                         'bg-blue-100 text-blue-800'
+                              }`}>
+                                {item.signal === 'buy' ? '추가매수' : item.signal === 'sell' ? '매도' : '보유'}
+                              </span>
+                              {item.totalScore != null && (
+                                <span className="text-xs text-gray-500">{Math.round(item.totalScore)}점</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2 text-xs text-gray-400">
+                              <span>{strategyLabel[item.strategyType] || item.strategyType}</span>
+                              <span>·</span>
+                              <span>{item.analysisDate}</span>
+                              <span className="ml-1 text-gray-400">{isExpanded ? '▲' : '▼'}</span>
+                            </div>
+                          </button>
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              if (!window.confirm('이 분석 결과를 삭제할까요?')) return;
+                              try {
+                                await stockApi.deleteAnalysisResult(item.id);
+                                setPerformanceData(prev => prev.filter(p => p.id !== item.id));
+                              } catch {
+                                alert('삭제에 실패했습니다.');
+                              }
+                            }}
+                            className="px-3 py-3 text-gray-300 hover:text-red-500 transition-colors"
+                            title="삭제"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
                         {isExpanded && (
                           <div className="px-4 pb-4 border-t border-gray-200">
                             {item.advice && (
