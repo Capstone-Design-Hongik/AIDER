@@ -259,7 +259,11 @@ async def analyze(data: dict, background_tasks: BackgroundTasks):
             "signal":      signal,
             "evaluation":  evaluation,
             "advice":      advice,
-            "total_score": result.total_score.total,
+            "scores": {
+                "youtube_strategy": result.total_score.youtube_strategy,
+                "trend_awareness":  result.total_score.trend_awareness,
+                "entry_timing":     result.total_score.entry_timing,
+            },
         }
 
         # 4. YouTube 자막 DB 저장 → 백그라운드 등록 (external 전략일 때만)
