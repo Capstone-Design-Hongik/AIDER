@@ -1004,7 +1004,7 @@ React.useEffect(() => {
                         score >= 80 ? 'text-emerald-600' :
                         score >= 60 ? 'text-blue-600' :
                         score >= 40 ? 'text-yellow-600' : 'text-red-600'
-                      }`}>{score}점</span>
+                      }`}>{Math.round(score)}점</span>
                     )}
                   </div>
                   <div className="text-xs text-gray-500 ml-7">{c.desc}</div>

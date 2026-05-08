@@ -108,11 +108,19 @@ public class AnalysisController {
             AnalysisResponse response = analysisService.analyzeTrading(analysisRequest);
 
             // 4-1. scores 평균으로 totalScore 계산
-            Map<String, Integer> scores = response.getScores();
+            Map<String, Double> scores = response.getScores();
             double totalScore = (scores != null && !scores.isEmpty())
-                    ? scores.values().stream().mapToInt(Integer::intValue).average().orElse(0)
+                    ? scores.values().stream().mapToDouble(Double::doubleValue).average().orElse(0)
                     : 0.0;
             long roundedScore = Math.round(totalScore);
+            // 프론트 표시용으로 각 점수도 정수 반올림
+            Map<String, Long> roundedScores = scores != null
+                    ? scores.entrySet().stream().collect(
+                          java.util.stream.Collectors.toMap(
+                              Map.Entry::getKey,
+                              e -> Math.round(e.getValue())
+                          ))
+                    : Map.of();
 
             // 5. 분석 결과 DB 저장 (AI 성과 추적용)
             Double latestPrice = stockPriceInfos.isEmpty() ? null
@@ -138,7 +146,7 @@ public class AnalysisController {
 
             Map<String, Object> result = new HashMap<>();
             result.put("total_score", roundedScore);
-            result.put("scores", scores);
+            result.put("scores", roundedScores);
             result.put("signal", response.getSignal());
             result.put("analysis", List.of(analysisItem));
 
