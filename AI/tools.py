@@ -2,14 +2,12 @@ import os
 import re
 import json
 import time
-from typing import Dict, List, Any, Optional, Tuple
-from datetime import datetime
+from typing import Dict, List, Any, Optional
 
 from openai import OpenAI
 from models import (
     UserData, UserAnalysisResult,
     TranscriptAnalysisResult, TranscriptSection,
-    VectorSearchResult,
 )
 from transcript import TranscriptManager
 from config import LLMConfig, SEARCH_CONFIDENCE_THRESHOLD

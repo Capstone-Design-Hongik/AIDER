@@ -35,7 +35,6 @@ EMBEDDING_DIM        = 512  # 256/512/1024/1536 가능. 512가 비용·성능 �
 
 # RAG
 RAG_K_DEFAULT              = 5
-RAG_K_MAX                  = 10
 SEARCH_SCORE_THRESHOLD     = 0.5
 SEARCH_CONFIDENCE_THRESHOLD = 0.70
 
