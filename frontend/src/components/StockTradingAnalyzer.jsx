@@ -952,11 +952,9 @@ React.useEffect(() => {
   };
 
   const SCORE_CRITERIA = [
-    { label: '매수 타점', desc: '눌림목/지지선에서 매수했는가' },
-    { label: '기술적 지표 활용', desc: '이동평균 등 지표 기반 매매인가' },
-    { label: '추세 파악 능력', desc: '상승/하락 추세를 인식하고 대응했는가' },
-    { label: '리스크 관리', desc: '손절 기준이 있는가, 과도한 추가 매수는 없는가' },
-    { label: '전략 준수도', desc: 'YouTube 전략을 얼마나 따랐는가' },
+    { key: 'youtube_strategy', label: '전략 준수도',    desc: 'YouTube/외부 전략을 얼마나 따랐는가' },
+    { key: 'trend_awareness',  label: '추세 파악 능력', desc: '상승/하락 추세를 인식하고 대응했는가' },
+    { key: 'entry_timing',     label: '매수 타점',      desc: '눌림목/지지선에서 적절히 진입했는가' },
   ];
   const GRADE_CRITERIA = [
     { range: '90 ~ 100점', label: '완벽한 전략 실행', color: 'text-emerald-600' },
@@ -989,18 +987,30 @@ React.useEffect(() => {
             <button onClick={() => setShowScoreModal(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none">✕</button>
           </div>
 
-          <p className="text-xs text-gray-500 mb-3">각 항목 0~20점 × 5개 = 100점 만점</p>
+          <p className="text-xs text-gray-500 mb-3">3개 항목 각 0~100점 · 평균이 종합 점수</p>
 
           <div className="space-y-2 mb-5">
-            {SCORE_CRITERIA.map((c, i) => (
-              <div key={i} className="flex gap-3 p-2.5 bg-gray-50 rounded-lg">
-                <span className="w-5 h-5 flex-shrink-0 bg-slate-900 text-white rounded-full text-xs flex items-center justify-center font-bold">{i + 1}</span>
-                <div>
-                  <div className="text-sm font-medium text-gray-800">{c.label}</div>
-                  <div className="text-xs text-gray-500 mt-0.5">{c.desc}</div>
+            {SCORE_CRITERIA.map((c, i) => {
+              const score = analysis?.scores?.[c.key];
+              return (
+                <div key={i} className="p-2.5 bg-gray-50 rounded-lg">
+                  <div className="flex items-center justify-between mb-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 flex-shrink-0 bg-slate-900 text-white rounded-full text-xs flex items-center justify-center font-bold">{i + 1}</span>
+                      <span className="text-sm font-medium text-gray-800">{c.label}</span>
+                    </div>
+                    {score != null && (
+                      <span className={`text-sm font-bold ${
+                        score >= 80 ? 'text-emerald-600' :
+                        score >= 60 ? 'text-blue-600' :
+                        score >= 40 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>{score}점</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-500 ml-7">{c.desc}</div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           <div className="border-t border-gray-100 pt-4">

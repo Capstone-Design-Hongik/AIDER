@@ -107,6 +107,13 @@ public class AnalysisController {
             // 4. Flask API 호출
             AnalysisResponse response = analysisService.analyzeTrading(analysisRequest);
 
+            // 4-1. scores 평균으로 totalScore 계산
+            Map<String, Integer> scores = response.getScores();
+            double totalScore = (scores != null && !scores.isEmpty())
+                    ? scores.values().stream().mapToInt(Integer::intValue).average().orElse(0)
+                    : 0.0;
+            long roundedScore = Math.round(totalScore);
+
             // 5. 분석 결과 DB 저장 (AI 성과 추적용)
             Double latestPrice = stockPriceInfos.isEmpty() ? null
                     : stockPriceInfos.get(stockPriceInfos.size() - 1).getClosePrice();
@@ -115,7 +122,7 @@ public class AnalysisController {
             if (latestPrice != null && response.getSignal() != null) {
                 analysisResultService.save(
                         stockName, stockCode, response.getSignal(), latestPrice, latestTradeDate,
-                        requestDto.getStrategy(), response.getAdvice(), response.getEvaluation(), response.getTotalScore()
+                        requestDto.getStrategy(), response.getAdvice(), response.getEvaluation(), totalScore
                 );
                 log.info("분석 결과 저장 완료 - {}, signal: {}, price: {}, lastTradeDate: {}",
                         stockName, response.getSignal(), latestPrice, latestTradeDate);
@@ -130,11 +137,12 @@ public class AnalysisController {
             analysisItem.put("evaluation", response.getEvaluation());
 
             Map<String, Object> result = new HashMap<>();
-            result.put("total_score", response.getTotalScore());
+            result.put("total_score", roundedScore);
+            result.put("scores", scores);
             result.put("signal", response.getSignal());
             result.put("analysis", List.of(analysisItem));
 
-            log.info("AI 분석 완료 - signal: {}, total_score: {}", response.getSignal(), response.getTotalScore());
+            log.info("AI 분석 완료 - signal: {}, total_score: {}", response.getSignal(), roundedScore);
             return ResponseEntity.ok(result);
 
         } catch (Exception e) {

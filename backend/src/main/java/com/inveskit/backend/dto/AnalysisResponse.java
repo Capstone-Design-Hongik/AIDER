@@ -1,8 +1,9 @@
 package com.inveskit.backend.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
+
+import java.util.Map;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 @Getter
@@ -14,7 +15,5 @@ public class AnalysisResponse {
     private String signal;
     private String evaluation;
     private String advice;
-
-    @JsonProperty("total_score")
-    private Double totalScore;
+    private Map<String, Integer> scores;
 }
