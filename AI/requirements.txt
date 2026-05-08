@@ -1,19 +1,13 @@
-# torch는 nixpacks.toml에서 CPU 버전으로 별도 설치 (CUDA 방지)
-# pip install -r 에서 재설치 방지를 위해 여기서는 제외
-
 # Web Framework
 fastapi>=0.110.0
 uvicorn>=0.29.0
 python-multipart>=0.0.9
 
-# LLM
+# LLM + Embedding (OpenAI API 사용 — 로컬 모델 불필요)
 openai>=1.30.0
 
 # Vector DB
 chromadb>=0.4.24
-
-# Embedding
-sentence-transformers>=2.7.0
 
 # YouTube 자막
 youtube-transcript-api>=1.0.0
