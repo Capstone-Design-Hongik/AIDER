@@ -162,8 +162,9 @@ class TranscriptAnalysisTool(BaseTool):
     CHUNK_SIZE       = 4_000
     CHUNK_OVERLAP    = 200
 
-    def __init__(self):
+    def __init__(self, vector_db=None):
         super().__init__("transcript_analysis")
+        self.vector_db = vector_db
 
     async def execute(self, youtube_url: str) -> TranscriptAnalysisResult:
         t0 = time.time()
@@ -171,7 +172,15 @@ class TranscriptAnalysisTool(BaseTool):
         print(f"📺 [Tool 2] 자막 분석")
         print(f"{'='*60}")
 
-        video_id   = TranscriptManager.extract_video_id(youtube_url)
+        video_id = TranscriptManager.extract_video_id(youtube_url)
+
+        # ── 캐시 히트 체크: 동일 video_id가 DB에 이미 분석돼 있으면 복원 ──
+        cached = self._load_from_cache(video_id)
+        if cached is not None:
+            cached.processing_time = round(time.time() - t0, 2)
+            print(f"  ⚡ 캐시 히트: 섹션 {len(cached.sections)}개 / {cached.processing_time}s")
+            return cached
+
         transcript = TranscriptManager.transcript(video_id)
         if not transcript:
             raise ValueError(f"자막 추출 실패: {video_id}")
@@ -189,6 +198,75 @@ class TranscriptAnalysisTool(BaseTool):
         result.processing_time = round(time.time() - t0, 2)
         print(f"  ✅ 섹션 {len(result.sections)}개 / {result.processing_time}s")
         return result
+
+    def _load_from_cache(self, video_id: str) -> Optional[TranscriptAnalysisResult]:
+        """ChromaDB에 동일 video_id의 섹션이 저장돼 있으면 TranscriptAnalysisResult로 복원."""
+        if self.vector_db is None or not video_id:
+            return None
+        try:
+            cached = self.vector_db.collection.get(
+                where={"$and": [
+                    {"video_id": {"$eq": video_id}},
+                    {"type": {"$eq": "transcript_section"}},
+                ]},
+                include=["documents", "metadatas"],
+            )
+            ids = cached.get("ids") or []
+            if not ids:
+                return None
+
+            docs  = cached.get("documents") or []
+            metas = cached.get("metadatas") or []
+
+            # 저장 시 ID에 chunk_id가 박혀 있으므로 정렬 가능 (없으면 원순서 유지)
+            order = sorted(range(len(ids)), key=lambda i: ids[i])
+
+            sections: List[TranscriptSection] = []
+            strategy_name = "일반 투자 조언"
+            for i in order:
+                doc = docs[i] if i < len(docs) else ""
+                meta = metas[i] if i < len(metas) else {}
+                strategy_name = meta.get("strategy_name", strategy_name) or strategy_name
+
+                # 저장 형식: "{section_name}\n{summary}\n- pt1\n- pt2"
+                lines = doc.split("\n")
+                section_name = meta.get("section_name") or (lines[0] if lines else "")
+                summary      = lines[1] if len(lines) > 1 else ""
+                key_points = [
+                    ln[2:].strip() for ln in lines[2:]
+                    if ln.startswith("- ") and ln[2:].strip()
+                ]
+                target_audience = meta.get("target_audience", "")
+                target_list = (
+                    [s.strip() for s in target_audience.split(",") if s.strip()]
+                    if isinstance(target_audience, str) else []
+                )
+                sections.append(TranscriptSection(
+                    section_name=section_name,
+                    content=doc,
+                    summary=summary,
+                    key_points=key_points,
+                    emotion=meta.get("emotion", ""),
+                    target_audience=target_list,
+                ))
+
+            if not sections:
+                return None
+
+            return TranscriptAnalysisResult(
+                sections=sections,
+                keywords=[],
+                structure={
+                    "video_id":        video_id,
+                    "original_length": 0,
+                    "strategy_name":   strategy_name,
+                },
+                confidence=0.9,
+                processing_time=0.0,
+            )
+        except Exception as e:
+            print(f"  ⚠️ 캐시 로드 실패, 정상 추출 진행: {e}")
+            return None
 
     async def _extract_direct(self, transcript: str) -> str:
         return _chat(LLMConfig.ANALYSIS_MODEL, f"""

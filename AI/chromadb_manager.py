@@ -1,7 +1,6 @@
 # 벡터DB 관리
 import chromadb
-from sentence_transformers import SentenceTransformer
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Any
 from models import VectorSearchResult
 import json
 import os
@@ -15,7 +14,7 @@ class ChromaDBManager:
     def __init__(
         self,
         db_path: str,
-        embedding_model: SentenceTransformer,
+        embedding_model: Any,
         collection_name: str = "investment_youtube",
     ):
         self.db_path = db_path
@@ -64,7 +63,7 @@ class ChromaDBManager:
             doc_id = f"{source}_{chunk_id}_{datetime.now().timestamp()}"
             ids.append(doc_id)
 
-            embeddings.append(self.embedding_model.encode(content).tolist())
+            embeddings.append(self.embedding_model.encode(content))
 
             # ChromaDB 메타데이터: str/int/float/bool 만 허용
             norm_meta: Dict = {}
@@ -111,7 +110,7 @@ class ChromaDBManager:
         """
         try:
             print(f"\n  [임베딩 입력 쿼리]\n  {query}\n")
-            query_embedding = self.embedding_model.encode(query).tolist()
+            query_embedding = self.embedding_model.encode(query)
             where = self._build_where_clause(metadata_filter) if metadata_filter else None
 
             results = self.collection.query(

@@ -29,10 +29,9 @@ class LLMConfig:
 # Vector DB
 VECTOR_DB_PATH = "./chroma_db"
 
-# Embedding (BAAI/bge-m3 로컬)
-EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
-EMBEDDING_MODEL_PATH = "./models/bge-m3"
-EMBEDDING_DIM        = 1024
+# Embedding (OpenAI API — 메모리 0, 한국어 우수)
+EMBEDDING_MODEL_NAME = "text-embedding-3-small"
+EMBEDDING_DIM        = 512  # 256/512/1024/1536 가능. 512가 비용·성능 균형
 
 # RAG
 RAG_K_DEFAULT              = 5
