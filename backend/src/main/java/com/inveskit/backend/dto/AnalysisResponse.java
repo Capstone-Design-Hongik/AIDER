@@ -15,5 +15,5 @@ public class AnalysisResponse {
     private String signal;
     private String evaluation;
     private String advice;
-    private Map<String, Integer> scores;
+    private Map<String, Double> scores;
 }
