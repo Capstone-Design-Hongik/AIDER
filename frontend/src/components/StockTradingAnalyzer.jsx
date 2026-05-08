@@ -26,6 +26,7 @@ const StockTradingAnalyzer = () => {
   const [loading, setLoading] = useState(false);
   const [savedStrategies, setSavedStrategies] = useState([]);
   const [strategySaveMsg, setStrategySaveMsg] = useState('');
+  const [strategyName, setStrategyName] = useState('');
 
   const [editingTradeId, setEditingTradeId] = useState(null);
   const [chartSelectedStock, setChartSelectedStock] = useState('');
@@ -443,9 +444,10 @@ React.useEffect(() => {
       return;
     }
     try {
-      const saved = await stockApi.saveStrategy(externalUrl);
+      const saved = await stockApi.saveStrategy(externalUrl, strategyName || null);
       setSavedStrategies([saved, ...savedStrategies]);
       setStrategySaveMsg('ok');
+      setStrategyName('');
       setTimeout(() => setStrategySaveMsg(''), 2500);
     } catch (error) {
       console.error('전략 저장 실패:', error);
@@ -689,15 +691,46 @@ React.useEffect(() => {
 
             {strategy === 'external' && (
               <div className="mt-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  전략 콘텐츠 URL
-                </label>
+                {savedStrategies.length > 0 && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">저장된 전략 선택</label>
+                    <div className="space-y-1">
+                      {savedStrategies.map(s => (
+                        <button
+                          key={s.id}
+                          onClick={() => setExternalUrl(s.url)}
+                          className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition-colors ${
+                            externalUrl === s.url
+                              ? 'bg-slate-900 text-white border-slate-900'
+                              : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-100'
+                          }`}
+                        >
+                          <span className="font-medium">{s.name || '이름 없음'}</span>
+                          <span className={`text-xs ml-2 truncate ${externalUrl === s.url ? 'opacity-60' : 'text-gray-400'}`}>{s.url}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2 my-3">
+                      <div className="flex-1 h-px bg-gray-200" />
+                      <span className="text-xs text-gray-400">또는</span>
+                      <div className="flex-1 h-px bg-gray-200" />
+                    </div>
+                  </div>
+                )}
+                <label className="block text-sm font-medium text-gray-700 mb-2">새 URL 직접 입력</label>
                 <input
                   type="url"
                   value={externalUrl}
                   onChange={(e) => setExternalUrl(e.target.value)}
                   placeholder="예: https://youtube.com/watch?v=..."
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+                />
+                <input
+                  type="text"
+                  value={strategyName}
+                  onChange={(e) => setStrategyName(e.target.value)}
+                  placeholder="전략 명칭 (예: 볼린저밴드 실전편)"
+                  className="w-full mt-2 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
                 />
                 <p className="text-xs text-gray-500 mt-2">
                   💡 유튜브, 블로그 등 투자 전략이 담긴 콘텐츠 URL을 입력하세요
@@ -710,7 +743,7 @@ React.useEffect(() => {
                   전략 저장하기
                 </button>
                 {strategySaveMsg === 'ok' && (
-                  <p className="text-xs text-emerald-600 mt-2 text-center">✓ 전략이 저장되었습니다</p>
+                  <p className="text-xs text-emerald-600 mt-2 text-center">✓ 저장되었습니다</p>
                 )}
                 {strategySaveMsg === 'already' && (
                   <p className="text-xs text-amber-600 mt-2 text-center">이미 저장된 URL입니다</p>
@@ -1516,10 +1549,11 @@ React.useEffect(() => {
                 {savedStrategies.map((item) => (
                   <div key={item.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
                     <div className="flex-1">
-                      <div className="text-sm text-gray-500 mb-1">저장일: {item.savedAt}</div>
-                      <a 
-                        href={item.url} 
-                        target="_blank" 
+                      {item.name && <div className="text-sm font-medium text-gray-900 mb-0.5">{item.name}</div>}
+                      <div className="text-xs text-gray-400 mb-1">저장일: {item.savedAt}</div>
+                      <a
+                        href={item.url}
+                        target="_blank"
                         rel="noopener noreferrer"
                         className="text-sm text-slate-600 hover:text-slate-900 break-all"
                       >

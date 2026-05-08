@@ -20,13 +20,14 @@ public class SavedStrategyService {
     }
 
     @Transactional
-    public SavedStrategy save(String url) {
+    public SavedStrategy save(String url, String name) {
         if (savedStrategyRepository.existsByUrl(url)) {
             throw new IllegalArgumentException("이미 저장된 URL입니다.");
         }
         return savedStrategyRepository.save(
             SavedStrategy.builder()
                 .url(url)
+                .name(name)
                 .savedAt(LocalDate.now())
                 .build()
         );
