@@ -72,14 +72,10 @@ class AgentDecision(BaseModel):
 
 
 class ScoreBreakdown(BaseModel):
-    """total_score 세부 항목 (각 20점 만점, 합계 100점)"""
-    entry_timing: float        # 매수 타점 적절성 (눌림목, 지지선)
-    indicator_usage: float     # 기술적 지표 활용 (이동평균 등)
-    trend_awareness: float     # 추세 파악 능력
-    risk_management: float     # 리스크 관리
-    strategy_adherence: float  # 영상 전략 준수도
-    total: float               # 합계 (0~100)
-    grade: str                 # 등급 설명
+    """3개 항목 각 100점 만점 독립 평가"""
+    youtube_strategy: float  # YouTube 전략 준수도 (0~100)
+    trend_awareness: float   # 추세 파악 능력 (0~100)
+    entry_timing: float      # 매수 타점 적절성 (0~100)
 
 
 class RAGOutput(BaseModel):

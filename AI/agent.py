@@ -16,7 +16,7 @@ class AgentManager:
         self.vector_db = vector_db
         self.tools = {
             "user_analysis":       UserAnalysisTool(),
-            "transcript_analysis": TranscriptAnalysisTool(vector_db=vector_db),
+            "transcript_analysis": TranscriptAnalysisTool(),
             "internal_strategy":   InternalStrategyTool(),
             "vector_search":       VectorSearchTool(vector_db),
             "refined_search":      RefinedSearchTool(vector_db),
@@ -126,7 +126,11 @@ class AgentManager:
             self._calculate_total_score(state, user_data),
             self._generate_advice(state, user_data),
         )
-        print(f"  ✅ total_score: {total_score.total:.1f}점 ({total_score.grade})")
+        print(
+            f"  ✅ scores: youtube={total_score.youtube_strategy:.0f} / "
+            f"trend={total_score.trend_awareness:.0f} / "
+            f"entry={total_score.entry_timing:.0f}"
+        )
         print(f"  ✅ 조언: {len(final_advice)}자")
 
         print("\n" + "=" * 70)
@@ -189,16 +193,7 @@ class AgentManager:
     # ── total_score 산정 ───────────────────────────────────────────
 
     async def _calculate_total_score(self, state: Dict, user_data: UserData) -> ScoreBreakdown:
-        """
-        5개 항목 각 20점 만점, 합계 100점.
-
-        등급 기준:
-          90~100: 완벽한 전략 실행
-          75~89 : 대체로 우수
-          60~74 : 핵심은 이해했으나 개선 필요
-          40~59 : 전략과 괴리
-          0~39  : 무계획적 매매
-        """
+        """3개 항목 각 0~100점 독립 평가."""
         insights = state["user_analysis"].additional_insights
         trades_str = "\n".join(
             f"{t.date} | {t.tradeType.upper()} | {t.quantity}주 @ {t.price:,.0f}원"
@@ -214,7 +209,8 @@ class AgentManager:
         )
 
         prompt = f"""
-아래 투자자의 매매 기록을 YouTube 전략과 비교하여 5개 항목을 각 20점 만점으로 채점하세요.
+아래 투자자의 매매 기록을 YouTube 전략과 비교하여 3개 항목을 각 0~100점으로 독립 채점하세요.
+세 항목은 서로 독립이며, 각각 100점 만점입니다.
 
 [YouTube 전략: {strategy_name}]
 {strategy_summary}
@@ -230,26 +226,20 @@ class AgentManager:
 [현재가] {insights.get('latest_price', 0):,.0f}원
 [수익률] {insights.get('pnl_pct', 0):+.2f}%
 
-채점 기준 (각 0~20점):
-1. entry_timing: 매수 타점 적절성 — 눌림목/지지선에서 매수했는가
-2. indicator_usage: 기술적 지표 활용 — 이동평균 등 지표 기반 매매인가
-3. trend_awareness: 추세 파악 능력 — 상승/하락 추세를 인식하고 대응했는가
-4. risk_management: 리스크 관리 — 손절 기준이 있는가, 과도한 추가 매수는 없는가
-5. strategy_adherence: 영상 전략 준수도 — YouTube 전략을 얼마나 따랐는가
+채점 기준 (각 0~100점):
+1. youtube_strategy: YouTube 전략 준수도 — 위 전략 원칙을 매매에 얼마나 충실히 따랐는가
+2. trend_awareness: 추세 파악 능력 — 상승/하락 추세를 인식하고 적절히 대응했는가
+3. entry_timing: 매수 타점 적절성 — 눌림목, 지지선, 적절한 가격대에 매수했는가
 
 JSON만 출력:
 {{
-  "entry_timing": 0.0,
-  "indicator_usage": 0.0,
-  "trend_awareness": 0.0,
-  "risk_management": 0.0,
-  "strategy_adherence": 0.0,
+  "youtube_strategy": 0,
+  "trend_awareness": 0,
+  "entry_timing": 0,
   "reasoning": {{
-    "entry_timing": "근거",
-    "indicator_usage": "근거",
+    "youtube_strategy": "근거",
     "trend_awareness": "근거",
-    "risk_management": "근거",
-    "strategy_adherence": "근거"
+    "entry_timing": "근거"
   }}
 }}
 """
@@ -257,30 +247,15 @@ JSON만 출력:
             text = _chat(LLMConfig.ANALYSIS_MODEL, prompt, max_tokens=600)
             data = _extract_json(text)
 
-            e = float(data.get("entry_timing", 0))
-            i = float(data.get("indicator_usage", 0))
-            t = float(data.get("trend_awareness", 0))
-            r = float(data.get("risk_management", 0))
-            s = float(data.get("strategy_adherence", 0))
-            total = round(e + i + t + r + s, 1)
-
-            if total >= 90:   grade = "완벽한 전략 실행"
-            elif total >= 75: grade = "대체로 우수"
-            elif total >= 60: grade = "핵심은 이해했으나 개선 필요"
-            elif total >= 40: grade = "전략과 괴리"
-            else:             grade = "무계획적 매매"
-
             return ScoreBreakdown(
-                entry_timing=e, indicator_usage=i, trend_awareness=t,
-                risk_management=r, strategy_adherence=s,
-                total=total, grade=grade,
+                youtube_strategy=float(data.get("youtube_strategy", 0)),
+                trend_awareness=float(data.get("trend_awareness", 0)),
+                entry_timing=float(data.get("entry_timing", 0)),
             )
         except Exception as e:
             print(f"  ⚠️  점수 산정 실패: {e} → 기본값 반환")
             return ScoreBreakdown(
-                entry_timing=0, indicator_usage=0, trend_awareness=0,
-                risk_management=0, strategy_adherence=0,
-                total=0, grade="산정 실패",
+                youtube_strategy=0, trend_awareness=0, entry_timing=0,
             )
 
     # ── 차트 지표 계산 ─────────────────────────────────────────────
@@ -413,10 +388,28 @@ advice 작성 필수 요건:
 - 같은 내용을 반복하지 말고, 앞 문장에서 제시한 근거가 뒷 문장의 행동 지침으로 이어지도록 구성할 것
 - 도입(원칙 인용) → 해석(차트 연결) → 결론(행동·시나리오)의 일관된 흐름을 유지
 
-signal 판단 기준:
-- buy  : 전략 원칙상 매수 신호 조건 충족 (지지선 근처, 골든크로스 등)
-- sell : 전략 원칙상 청산 신호 조건 충족 (저항선 실패, 데드크로스, 손절 이탈)
-- hold : 전략 원칙상 명확한 신호 없음, 관망 구간
+━━━ signal 판단 (가장 중요) ━━━
+signal은 위 [{strategy_name} 전략 원칙]을 현재 차트에 적용했을 때,
+"향후 30일 동안 주가가 어느 방향으로 움직일 것인가"에 대한 예측입니다.
+이 예측은 30일 뒤 실제 가격과 비교해 정확도를 평가받습니다.
+
+판단 절차 (반드시 이 순서로):
+1. 위 [전략 원칙] 중 현재 차트 상황에 해당하는 매수/매도/관망 조건을 식별
+2. 해당 원칙이 가리키는 방향이 향후 30일 주가 방향과 일치하는지 검토
+3. 일치하면 그 방향으로 signal 결정, 불일치·모호하면 hold
+
+signal 매핑:
+- buy  : 전략 원칙상 매수 조건 충족 + 향후 30일 상승 가능성 우세
+         (예: 골든크로스, 지지선 반등, 볼린저 하단 터치 후 반등, 5MA·20MA 상향 정렬 등)
+- sell : 전략 원칙상 청산 조건 충족 + 향후 30일 하락 가능성 우세
+         (예: 데드크로스, 저항선 실패, 볼린저 상단 도달 후 되돌림, 60MA 하향 이탈, 손절 이탈 등)
+- hold : 전략 원칙상 명확한 신호 부재 또는 신호 혼재
+         (MA 수렴, ±2% 횡보, 추세 전환 미확정 등)
+
+주의:
+- 전략 원칙을 무시하고 차트만으로 판단하지 말 것 — signal은 어디까지나 전략의 결과물
+- 사용자의 평균 매수가·수익률은 signal 결정에 영향 주지 말 것 (방향성 예측과 무관)
+- 전략 원칙과 차트 신호가 충돌하면 hold (확신 없을 때 hold가 정답률 측면에서 안전)
 
 아래 JSON 형식으로만 출력하세요 (advice는 단일 문자열, 위 4요소를 자연스러운 문단으로 통합):
 {{
