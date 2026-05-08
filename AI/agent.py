@@ -303,7 +303,6 @@ JSON만 출력:
     # ── 최종 조언 생성 ─────────────────────────────────────────────
 
     async def _generate_advice(self, state: Dict, user_data: UserData) -> str:
-        stock_name = user_data.trades[0].stockName if user_data.trades else "종목"
         insights   = state["user_analysis"].additional_insights
         chart      = self._calc_chart(user_data)
 
