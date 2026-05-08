@@ -28,7 +28,8 @@ public class StrategyController {
             return ResponseEntity.badRequest().body("URL이 필요합니다.");
         }
         try {
-            SavedStrategy saved = savedStrategyService.save(url);
+            String name = body.get("name");
+            SavedStrategy saved = savedStrategyService.save(url, name);
             return ResponseEntity.ok(saved);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(e.getMessage());

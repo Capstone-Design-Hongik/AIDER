@@ -214,9 +214,9 @@ const stockApi = {
     }
   },
 
-  saveStrategy: async (url) => {
+  saveStrategy: async (url, name) => {
     try {
-      const response = await axios.post(`${API_BASE_URL}/strategies`, { url });
+      const response = await axios.post(`${API_BASE_URL}/strategies`, { url, name });
       return response.data;
     } catch (error) {
       console.error('전략 저장 실패:', error);
