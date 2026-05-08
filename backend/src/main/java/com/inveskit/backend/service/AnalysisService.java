@@ -41,8 +41,8 @@ public class AnalysisService {
             ObjectMapper mapper = new ObjectMapper();
             AnalysisResponse response = mapper.readValue(responseBody, AnalysisResponse.class);
 
-            log.info("Flask API 응답 성공 - totalScore: {}, signal: {}",
-                    response.getTotalScore(),
+            log.info("Flask API 응답 성공 - scores: {}, signal: {}",
+                    response.getScores(),
                     response.getSignal());
 
             return response;
