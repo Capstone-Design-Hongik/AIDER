@@ -30,8 +30,8 @@ class LLMConfig:
 VECTOR_DB_PATH = "./chroma_db"
 
 # Embedding (OpenAI API — 메모리 0, 한국어 우수)
-EMBEDDING_MODEL_NAME = "text-embedding-3-small"
-EMBEDDING_DIM        = 512  # 256/512/1024/1536 가능. 512가 비용·성능 균형
+EMBEDDING_MODEL_NAME = "text-embedding-3-large"
+EMBEDDING_DIM        = 1024  # 256/512/1024/3072 가능. 1024가 성능·비용 균형
 
 # RAG
 RAG_K_DEFAULT              = 5
