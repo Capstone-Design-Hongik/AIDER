@@ -148,12 +148,21 @@ class AgentManager:
 
     # ── 의사결정 (규칙 기반) ───────────────────────────────────────
 
-    async def _decide(self, state: Dict, _: int) -> AgentDecision:
+    async def _decide(self, state: Dict, iteration: int) -> AgentDecision:
         count = len(state["search_results"])
+        
+        # [긴급수정] 1회차 검색 후에도 결과가 0건이면, 더 이상 무의미한 검색 반복 대신 종료
+        if iteration > 1 and count == 0:
+            return AgentDecision(
+                next_action="stop",
+                reasoning="DB에서 관련 이론적 배경을 찾지 못했습니다. 분석된 자막 내용을 바탕으로 진행합니다.",
+                confidence=1.0, parameters={},
+            )
+
         if count < 3:
             return AgentDecision(
                 next_action="vector_search",
-                reasoning=f"검색 결과 {count}건 → YouTube 전략 기반 검색",
+                reasoning=f"검색 결과 {count}건 → 전략의 이론적 배경 및 일반 원칙 검색",
                 confidence=0.9, parameters={},
             )
         if state["validated"] is None:
@@ -173,17 +182,18 @@ class AgentManager:
         keywords      = ", ".join(transcript_analysis.keywords[:8])
         sections      = ", ".join(s.section_name for s in transcript_analysis.sections[:4])
 
+        # [긴급수정] '영상의 내용'을 묻지 않고, '전략의 기반 이론/상식'을 찾도록 쿼리 유도
         if iteration == 1:
             prompt = (
-                f"YouTube 투자 영상의 핵심 내용을 검색하는 쿼리를 한국어 2문장으로 작성하세요.\n"
-                f"전략명: {strategy_name}\n키워드: {keywords}\n섹션: {sections}\n\n쿼리:"
+                f"투자 전략 '{strategy_name}' 및 핵심 키워드({keywords})와 관련된 "
+                f"보편적인 기술적 분석 이론, 매수/매도 원칙, 또는 리스크 관리 지침을 "
+                f"벡터 DB에서 검색하기 위한 핵심 키워드 중심의 쿼리를 한국어 1문장으로 작성하세요.\n"
+                f"주의: 특정 영상의 내용을 묻지 말고, 해당 전략의 '이론적 근거'를 찾으세요."
             )
         else:
-            top = transcript_analysis.sections[0] if transcript_analysis.sections else None
-            detail = f"'{top.section_name}': {top.summary}" if top else sections
             prompt = (
-                f"YouTube 영상 특정 섹션의 구체적인 조언을 찾는 쿼리를 한국어 2문장으로 작성하세요.\n"
-                f"{detail}\n\n쿼리:"
+                f"전략명 '{strategy_name}'의 핵심 섹션({sections})과 관련된 "
+                f"일반적인 투자 주의사항이나 차트 해석 원칙을 찾는 쿼리를 한국어 1문장으로 작성하세요."
             )
 
         query = _chat(LLMConfig.AGENT_MODEL, prompt, max_tokens=150)
@@ -319,7 +329,7 @@ JSON만 출력:
             for s in ta.sections
         )
 
-        # DB 검색 결과: external일 때 DB 미스 가능성 있으므로 보조 참고로만 사용
+        # DB 검색 결과: 전략 보완용 이론적 배경
         search_str = "\n".join(
             f"[{i+1}] {r.content[:200]}"
             for i, r in enumerate(state["search_results"][:3])
@@ -328,18 +338,23 @@ JSON만 출력:
         prompt = f"""
 당신은 {strategy_name} 전략을 전문으로 하는 투자 분석가입니다.
 조언의 최종 목적은 "이 사용자의 매매 기록"에 맞춘 맞춤형 대응 전략 제시입니다.
-{strategy_name} 전략 원칙은 사용자의 매매 상황을 해석하고 조언하는 "렌즈"이며,
-차트 데이터는 그 해석을 뒷받침하는 보조 수단입니다.
-과거 매매 평가가 아닌, 사용자의 현재 포지션을 기준으로 지금부터 어떻게 해야 하는지를 서술하세요.
+
+[중요 지침]
+1. 유튜브 자막 분석 내용(transcript_str)을 1순위 근거로 삼으세요.
+2. 벡터 DB 검색 결과(search_str)는 해당 전략을 보완하는 '이론적 배경'으로만 활용하세요.
+3. 만약 검색 결과가 자막과 충돌한다면 유튜브 자막의 최신 전략을 우선시하세요.
 
 ━━━ 가장 중요: 사용자 매매 기록 (조언의 핵심 대상) ━━━
 [매매 내역]
 {trades_str}
 - 평균 매수가: {insights.get('avg_buy_price', 0):,.0f}원 / 현재가: {insights.get('latest_price', 0):,.0f}원 / 수익률: {insights.get('pnl_pct', 0):+.2f}%
 
-━━━ 해석의 렌즈: {strategy_name} 전략 원칙 ━━━
+━━━ 해석의 렌즈 1: {strategy_name} 전략 원칙 (최우선) ━━━
 {transcript_str}
-{"" if not search_str else f"{chr(10)}[보조 참고]{chr(10)}{search_str}{chr(10)}"}
+
+━━━ 해석의 렌즈 2: 보조 이론 및 원칙 (VectorDB 검색 결과) ━━━
+{search_str if search_str else "관련 보조 이론 없음"}
+
 ━━━ 보조 데이터: 차트 지표 ━━━
 
 [차트 ({chart.get('period', '')})]
