@@ -12,88 +12,6 @@ from config import VECTOR_DB_PATH
 
 load_dotenv()
 
-# ── 유틸 함수 ──────────────────────────────────────────────
-
-async def _save_transcript_to_db(vector_db, transcript_result, user_data):
-    """YouTube 자막을 섹션별로 DB에 저장 (백그라운드에서 실행됨)"""
-    from datetime import datetime
-    from langchain_core.documents import Document
-
-    strategy_name = transcript_result.structure.get("strategy_name", "일반 투자 조언")
-    video_id      = transcript_result.structure.get("video_id", "unknown")
-
-    # 동일 video_id가 이미 저장돼 있으면 중복 저장 스킵
-    try:
-        existing = vector_db.collection.get(
-            where={"video_id": {"$eq": video_id}},
-            limit=1,
-        )
-        if existing and existing.get("ids"):
-            print(
-                f"\n[BG] ⏭️  동일 영상 '{video_id}' 이미 존재 → DB 저장 생략 (전략: {strategy_name})",
-                file=sys.stderr,
-            )
-            return
-    except Exception as e:
-        print(f"\n[BG] ⚠️ 중복 체크 실패, 저장 진행: {e}", file=sys.stderr)
-
-    documents = []
-
-    # 전체 요약
-    full_content = " ".join(
-        f"{sec.section_name}: {sec.summary}" for sec in transcript_result.sections
-    )
-    documents.append(
-        Document(
-            page_content=full_content,
-            metadata={
-                "source":        "youtube_transcript",
-                "video_id":      video_id,
-                "strategy_name": strategy_name,
-                "type":          "transcript_summary",
-                "added_at":      datetime.now().isoformat(),
-            },
-        )
-    )
-
-    # 섹션별 저장
-    for sec in transcript_result.sections:
-        content = f"{sec.section_name}\n{sec.summary}\n" + "\n".join(
-            f"- {pt}" for pt in sec.key_points
-        )
-        documents.append(
-            Document(
-                page_content=content,
-                metadata={
-                    "source":          "youtube_section",
-                    "video_id":        video_id,
-                    "strategy_name":   strategy_name,
-                    "section_name":    sec.section_name,
-                    "emotion":         sec.emotion,
-                    "target_audience": ",".join(sec.target_audience),
-                    "type":            "transcript_section",
-                    "added_at":        datetime.now().isoformat(),
-                },
-            )
-        )
-
-    count = vector_db.add_documents(documents=documents, doc_type="youtube")
-    print(f"\n[BG] ✅ YouTube 자막 DB 저장 완료: {count}개 문서 (전략: {strategy_name})",
-          file=sys.stderr)
-
-
-def _bg_save_transcript(vector_db, transcript_result, user_data):
-    """BackgroundTasks용 동기 래퍼 — asyncio.run으로 비동기 함수 실행"""
-    import asyncio
-    print("\n[BG] YouTube 자막 DB 저장 시작...", file=sys.stderr)
-    try:
-        asyncio.run(_save_transcript_to_db(vector_db, transcript_result, user_data))
-    except Exception as e:
-        print(f"\n[BG] ❌ YouTube 자막 DB 저장 실패: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-
-
 # ── FastAPI 앱 ─────────────────────────────────────────────
 app = FastAPI(
     title="Agentic RAG Investment Advisor",
@@ -212,8 +130,7 @@ async def analyze(data: dict, background_tasks: BackgroundTasks):
     """
     흐름:
       1. Agent 실행 (분석 + 검색 + 조언 생성)
-      2. 응답 즉시 백엔드에 반환  ← 여기서 끊음
-      3. YouTube 자막 DB 저장     ← 백그라운드에서 처리
+      2. 응답 즉시 백엔드에 반환
     """
     print("\n" + "=" * 60, file=sys.stderr)
     print("[API] POST /analyze", file=sys.stderr)
@@ -266,18 +183,8 @@ async def analyze(data: dict, background_tasks: BackgroundTasks):
             },
         }
 
-        # 4. YouTube 자막 DB 저장 → 백그라운드 등록 (external 전략일 때만)
-        if result.transcript_analysis and vector_db and user_data.strategy == "external":
-            background_tasks.add_task(
-                _bg_save_transcript,
-                vector_db,
-                result.transcript_analysis,
-                user_data,
-            )
-            print("\n[분석-3] YouTube 자막 DB 저장 → 백그라운드 등록", file=sys.stderr)
-
-        # 5. 응답 즉시 반환
-        print("\n[분석-4] ✅ 백엔드로 응답 반환", file=sys.stderr)
+        # 4. 응답 즉시 반환
+        print("\n[분석-3] ✅ 백엔드로 응답 반환", file=sys.stderr)
         print("=" * 60 + "\n", file=sys.stderr)
         return response
 
