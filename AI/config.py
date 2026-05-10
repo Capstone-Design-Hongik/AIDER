@@ -35,7 +35,7 @@ EMBEDDING_DIM        = 512  # 256/512/1024/1536 가능. 512가 비용·성능 �
 
 # RAG
 RAG_K_DEFAULT              = 5
-SEARCH_SCORE_THRESHOLD     = 0.5
+SEARCH_SCORE_THRESHOLD     = 0.35
 SEARCH_CONFIDENCE_THRESHOLD = 0.70
 
 # YouTube Proxy — YOUTUBE_PROXY 환경변수 (YouTube 요청에만 적용)
