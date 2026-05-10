@@ -116,7 +116,7 @@ class AgentManager:
             print(f"└─")
 
         if not state["search_results"]:
-            raise ValueError("벡터 검색 결과 없음")
+            print("⚠️  벡터 검색 결과 없음 → 전략 분석만으로 조언 생성")
 
         # ── Step 3+4: total_score 산정 + 최종 조언 생성 (병렬) ──
         print("\n" + "─" * 70)
