@@ -266,10 +266,6 @@ JSON만 출력:
   "confidence": 0.9
 }}
 """, max_tokens=3000)
-  "keywords": ["키워드1", "키워드2"],
-  "confidence": 0.9
-}}
-""", max_tokens=3000)
         result = _extract_json(text)
         return TranscriptAnalysisResult(
             sections=[TranscriptSection(**s) for s in result.get("sections", [])],
