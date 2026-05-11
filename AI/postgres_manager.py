@@ -36,7 +36,7 @@ is_ready      = False
 
 def _do_heavy_imports():
     """이벤트 루프 블로킹 방지 — 스레드 풀에서 무거운 import 실행"""
-    from postgres_manager import PostgresVectorManager
+    from chromadb_manager import PostgresVectorManager
     from download_embedding_model import EmbeddingModelManager
     from agent import AgentManager
     from add_pdf import PDFManager
