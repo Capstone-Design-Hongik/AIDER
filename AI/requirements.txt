@@ -6,8 +6,9 @@ python-multipart>=0.0.9
 # LLM + Embedding (OpenAI API 사용 — 로컬 모델 불필요)
 openai>=1.30.0
 
-# Vector DB
-chromadb>=0.4.24
+# Vector DB (PostgreSQL + pgvector)
+psycopg[binary,pool]>=3.1.18
+pgvector>=0.2.5
 
 # YouTube 자막
 youtube-transcript-api>=1.0.0

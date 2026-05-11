@@ -111,10 +111,24 @@ class PDFManager:
         return self.vector_db.add_documents(documents=documents, doc_type="text")
 
 if __name__ == "__main__":
+    import sys
+    from dotenv import load_dotenv
+    load_dotenv()
+
+    args = sys.argv[1:]
+    if "--seed-strategy" not in args:
+        print("사용법: python add_pdf.py --seed-strategy")
+        sys.exit(0)
+
+    db_url = os.getenv("DATABASE_URL")
+    if not db_url:
+        print("❌ DATABASE_URL 환경변수가 설정되지 않았습니다.")
+        sys.exit(1)
+
     from download_embedding_model import EmbeddingModelManager
-    from chromadb_manager import ChromaDBManager
+    from postgres_manager import PostgresVectorManager
     embedding_model = EmbeddingModelManager.download_model()
-    vector_db = ChromaDBManager(db_path="./chroma_db", embedding_model=embedding_model)
+    vector_db = PostgresVectorManager(db_url=db_url, embedding_model=embedding_model)
     manager = PDFManager(vector_db)
     count = manager.seed_strategy_knowledge()
     print(f"완료: {count}개 문서 삽입됨")
