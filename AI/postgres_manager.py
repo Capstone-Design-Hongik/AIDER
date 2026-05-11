@@ -1,242 +1,177 @@
-import asyncio
+# PostgreSQL + pgvector 관리
+import json
 import os
-import sys
-from dotenv import load_dotenv
+from typing import List, Dict, Optional, Tuple, Any
+from datetime import datetime
 
-import uvicorn
-from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
+import psycopg
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
+from pgvector.psycopg import register_vector
 
-from models import UserData, Trade, StockPrice
-from config import VECTOR_DB_PATH
-
-load_dotenv()
-
-# ── FastAPI 앱 ─────────────────────────────────────────────
-app = FastAPI(
-    title="Agentic RAG Investment Advisor",
-    description="단일 종목 YouTube 기반 AI 투자 조언 시스템",
-    version="2.0.0",
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# 전역 싱글톤 — 타입은 런타임에 결정 (lazy import)
-vector_db     = None
-agent_manager = None
-pdf_manager   = None
-is_ready      = False
+from models import VectorSearchResult
+from config import SEARCH_SCORE_THRESHOLD, EMBEDDING_DIM
 
 
-def _do_heavy_imports():
-    """이벤트 루프 블로킹 방지 — 스레드 풀에서 무거운 import 실행"""
-    from chromadb_manager import PostgresVectorManager
-    from download_embedding_model import EmbeddingModelManager
-    from agent import AgentManager
-    from add_pdf import PDFManager
-    return PostgresVectorManager, EmbeddingModelManager, AgentManager, PDFManager
+class PostgresVectorManager:
+    """PostgreSQL + pgvector 관리 매니저"""
 
+    def __init__(
+        self,
+        db_url: str,
+        embedding_model: Any,
+        table_name: str = "investment_knowledge",
+    ):
+        self.db_url = db_url
+        self.table_name = table_name
+        self.embedding_model = embedding_model
+        self.embedding_dim = EMBEDDING_DIM
 
-async def _init_in_background():
-    global vector_db, agent_manager, pdf_manager, is_ready
+        # 연결 풀 생성
+        self.pool = ConnectionPool(conninfo=db_url, min_size=1, max_size=10)
+        
+        # 스키마 초기화
+        self._init_db()
+        print(f"✅ PostgreSQL(pgvector) 초기화 완료")
+        print(f"  📚 테이블: {table_name}")
+        print(f"  🧠 임베딩 차원: {self.embedding_dim}")
 
-    print("\n" + "=" * 60, file=sys.stderr)
-    print("🚀 FastAPI 서버 초기화 시작 (백그라운드)", file=sys.stderr)
-    print("=" * 60, file=sys.stderr)
+    def _init_db(self):
+        """테이블 및 확장 기능 초기화"""
+        with self.pool.connection() as conn:
+            with conn.cursor() as cur:
+                # 1. pgvector 확장 기능 활성화
+                cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+                
+                # 2. 테이블 생성 (UUID, content, metadata, embedding)
+                cur.execute(f"""
+                    CREATE TABLE IF NOT EXISTS {self.table_name} (
+                        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                        content TEXT NOT NULL,
+                        metadata JSONB,
+                        embedding vector({self.embedding_dim}),
+                        added_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+                
+                # 3. HNSW 인덱스 생성 (검색 성능 최적화)
+                cur.execute(f"""
+                    CREATE INDEX IF NOT EXISTS {self.table_name}_embedding_idx 
+                    ON {self.table_name} USING hnsw (embedding vector_cosine_ops);
+                """)
+                conn.commit()
 
-    _missing = [k for k in ["OPENAI_API_KEY", "DATABASE_URL"] if not os.getenv(k)]
-    if _missing:
-        print(f"❌ 필수 환경변수 누락: {', '.join(_missing)}", file=sys.stderr)
-        return
+    def add_documents(self, documents: List, doc_type: str = "raw") -> int:
+        """문서들을 PostgreSQL에 저장"""
+        added_count = 0
+        
+        with self.pool.connection() as conn:
+            # pgvector 등록 (각 연결마다 필요)
+            register_vector(conn)
+            
+            with conn.cursor() as cur:
+                for doc in documents:
+                    if hasattr(doc, "page_content"):
+                        content = doc.page_content
+                        metadata = dict(doc.metadata) if hasattr(doc, "metadata") else {}
+                    elif isinstance(doc, dict):
+                        content = doc.get("content", "")
+                        metadata = {k: v for k, v in doc.items() if k != "content"}
+                    else:
+                        continue
 
-    db_url = os.getenv("DATABASE_URL")
-    print(f"\n[초기화-1] Postgres 연결 시도...", file=sys.stderr)
+                    if not content.strip():
+                        continue
 
-    try:
-        loop = asyncio.get_running_loop()
+                    # 메타데이터 정리
+                    metadata["type"] = doc_type
+                    
+                    # 임베딩 생성 (OpenAI API 호출)
+                    embedding = self.embedding_model.encode(content)
 
-        print("\n[초기화-2] 📦 무거운 패키지 로드 중...", file=sys.stderr)
-        PostgresVectorManager, EmbeddingModelManager, AgentManager, PDFManager = \
-            await loop.run_in_executor(None, _do_heavy_imports)
-        print("  ✅ 패키지 로드 완료", file=sys.stderr)
+                    # 저장
+                    cur.execute(
+                        f"INSERT INTO {self.table_name} (content, metadata, embedding) VALUES (%s, %s, %s)",
+                        (content, json.dumps(metadata), embedding)
+                    )
+                    added_count += 1
+                
+                conn.commit()
+        
+        print(f"✅ {added_count}개 문서 PostgreSQL 저장 완료")
+        return added_count
 
-        print("\n[초기화-3] 📥 임베딩 모델 로드 중...", file=sys.stderr)
-        embedding_model = await loop.run_in_executor(None, EmbeddingModelManager.download_model)
-        print("  ✅ 임베딩 모델 로드 완료", file=sys.stderr)
-
-        print("\n[초기화-4] 🗄️  PostgreSQL 초기화 중...", file=sys.stderr)
-        vector_db = PostgresVectorManager(db_url=db_url, embedding_model=embedding_model)
-        print("  ✅ PostgreSQL 초기화 완료", file=sys.stderr)
-
-        print("\n[초기화-5] 🤖 Agent Manager 생성 중...", file=sys.stderr)
-        agent_manager = AgentManager(vector_db)
-        print("  ✅ Agent Manager 생성 완료", file=sys.stderr)
-
-        print("\n[초기화-6] 📄 PDF Manager 생성 중...", file=sys.stderr)
-        pdf_manager = PDFManager(vector_db)
-        print("  ✅ PDF Manager 생성 완료", file=sys.stderr)
-
-        print("\n[초기화-7] 🌱 전략 지식 시드 확인...", file=sys.stderr)
-        if vector_db.count_documents() == 0:
-            count = pdf_manager.seed_strategy_knowledge()
-            print(f"  ✅ 전략 지식 {count}개 문서 자동 적재 완료", file=sys.stderr)
-        else:
-            print(f"  ⏭️  DB에 문서 있음 ({vector_db.count_documents()}개) → 시드 생략", file=sys.stderr)
-
-        is_ready = True
-        print("\n" + "=" * 60, file=sys.stderr)
-        print("✅ 서버 준비 완료!", file=sys.stderr)
-        print("=" * 60 + "\n", file=sys.stderr)
-
-    except Exception as e:
-        print(f"\n❌ 초기화 실패: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-
-
-@app.on_event("startup")
-async def startup():
-    asyncio.create_task(_init_in_background())
-
-
-@app.on_event("shutdown")
-async def shutdown():
-    print("\n🛑 서버 종료", file=sys.stderr)
-
-
-# ── 헬스 체크 ──────────────────────────────────────────────
-
-@app.get("/health")
-async def health():
-    if not is_ready:
-        return {"status": "initializing"}
-    return {
-        "status": "healthy",
-        "database": vector_db.get_stats() if vector_db else None,
-    }
-
-
-# ── 핵심 분석 엔드포인트 ────────────────────────────────────
-
-@app.post("/analyze")
-@app.post("/api/analyze")
-async def analyze(data: dict, background_tasks: BackgroundTasks):
-    """
-    흐름:
-      1. Agent 실행 (분석 + 검색 + 조언 생성)
-      2. 응답 즉시 백엔드에 반환
-    """
-    print("\n" + "=" * 60, file=sys.stderr)
-    print("[API] POST /analyze", file=sys.stderr)
-    print("=" * 60, file=sys.stderr)
-
-    if not agent_manager:
-        raise HTTPException(status_code=503, detail="시스템 초기화 중입니다.")
-
-    try:
-        # 1. UserData 파싱
-        print("\n[분석-1] UserData 파싱 중...", file=sys.stderr)
-        user_data = UserData(
-            trades      =[Trade(**t)      for t in data.get("trades", [])],
-            stockPrices =[StockPrice(**p) for p in data.get("stockPrices", [])],
-            strategy    =data.get("strategy", "external"),
-            externalUrl =data.get("externalUrl", ""),
-        )
-        print(f"  ✅ 매매 {len(user_data.trades)}건 / 종가 {len(user_data.stockPrices)}일",
-              file=sys.stderr)
-
-        # 2. Agent 실행
-        print("\n[분석-2] Agent 실행 중...", file=sys.stderr)
-        result = await agent_manager.run(user_data)
-        print(f"  ✅ Agent 완료 (반복: {len(result.agent_decisions)}회)", file=sys.stderr)
-
-        # 3. 응답 JSON 구성 — final_advice는 {"evaluation":..,"advice":..} JSON 문자열
-        from tools import _extract_json
+    def search(
+        self,
+        query: str,
+        k: int = 5,
+        metadata_filter: Optional[Dict] = None,
+        score_threshold: float = SEARCH_SCORE_THRESHOLD,
+    ) -> Tuple[List[VectorSearchResult], float]:
+        """pgvector 기반 코사인 유사도 검색"""
         try:
-            advice_data = _extract_json(result.final_advice)
-            evaluation  = advice_data.get("evaluation", result.final_advice)
-            advice      = advice_data.get("advice",     result.final_advice)
-            signal      = advice_data.get("signal",     "hold")
-            if signal not in ("buy", "sell", "hold"):
-                signal = "hold"
-        except Exception:
-            evaluation = result.final_advice
-            advice     = result.final_advice
-            signal     = "hold"
+            print(f"\n  [Postgres 검색] {query}")
+            query_embedding = self.embedding_model.encode(query)
+            
+            search_results: List[VectorSearchResult] = []
+            total_score = 0.0
 
-        response = {
-            "code":        user_data.trades[0].stockCode if user_data.trades else "",
-            "type":        user_data.trades[0].tradeType if user_data.trades else "",
-            "signal":      signal,
-            "evaluation":  evaluation,
-            "advice":      advice,
-            "scores": {
-                "youtube_strategy": result.total_score.youtube_strategy,
-                "trend_awareness":  result.total_score.trend_awareness,
-                "entry_timing":     result.total_score.entry_timing,
-            },
+            with self.pool.connection() as conn:
+                register_vector(conn)
+                with conn.cursor(row_factory=dict_row) as cur:
+                    # 코사인 유사도: 1 - (embedding <=> query_embedding)
+                    # <=> : cosine distance
+                    sql = f\"\"\"
+                        SELECT id, content, metadata, 
+                               1 - (embedding <=> %s) AS similarity
+                        FROM {self.table_name}
+                        WHERE 1 - (embedding <=> %s) >= %s
+                        ORDER BY similarity DESC
+                        LIMIT %s
+                    \"\"\"
+                    cur.execute(sql, (query_embedding, query_embedding, score_threshold, k))
+                    rows = cur.fetchall()
+
+                    for row in rows:
+                        search_results.append(
+                            VectorSearchResult(
+                                id=str(row["id"]),
+                                content=row["content"],
+                                similarity_score=float(row["similarity"]),
+                                metadata=row["metadata"] or {},
+                                type=row["metadata"].get("type", "unknown") if row["metadata"] else "unknown"
+                            )
+                        )
+                        total_score += float(row["similarity"])
+
+            coverage = (total_score / k) if k > 0 else 0.0
+            print(f"     결과 {len(search_results)}건 / 커버리지 {coverage:.2%}")
+            return search_results, coverage
+
+        except Exception as e:
+            print(f"❌ 검색 실패: {e}")
+            import traceback
+            traceback.print_exc()
+            return [], 0.0
+
+    def count_documents(self) -> int:
+        with self.pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"SELECT COUNT(*) FROM {self.table_name}")
+                return cur.fetchone()[0]
+
+    def get_stats(self) -> Dict:
+        count = self.count_documents()
+        return {
+            "total_documents": count,
+            "engine": "PostgreSQL + pgvector",
+            "table_name": self.table_name,
+            "embedding_dimension": self.embedding_dim
         }
 
-        # 4. 응답 즉시 반환
-        print("\n[분석-3] ✅ 백엔드로 응답 반환", file=sys.stderr)
-        print("=" * 60 + "\n", file=sys.stderr)
-        return response
-
-    except Exception as e:
-        print(f"\n❌ 분석 실패: {e}", file=sys.stderr)
-        import traceback
-        traceback.print_exc(file=sys.stderr)
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-# ── PDF 추가 ───────────────────────────────────────────────
-
-@app.post("/add-pdf")
-async def add_pdf(file: UploadFile = File(...)):
-    print(f"\n[API] POST /add-pdf: {file.filename}", file=sys.stderr)
-    if not pdf_manager:
-        raise HTTPException(status_code=503, detail="시스템 초기화 중입니다.")
-
-    temp_path = f"/tmp/{file.filename}"
-    try:
-        with open(temp_path, "wb") as f:
-            f.write(await file.read())
-        count = await pdf_manager.add_pdf_file(pdf_path=temp_path, title=file.filename)
-        print(f"  ✅ PDF 추가 완료: {count}개 문서", file=sys.stderr)
-        return {"success": True, "added_count": count}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    finally:
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-
-
-# ── DB 관리 ────────────────────────────────────────────────
-
-@app.get("/db-stats")
-async def db_stats():
-    if not vector_db:
-        raise HTTPException(status_code=503, detail="시스템 초기화 중입니다.")
-    return vector_db.get_stats()
-
-
-@app.delete("/clear-db")
-async def clear_db():
-    if not vector_db:
-        raise HTTPException(status_code=503, detail="시스템 초기화 중입니다.")
-    vector_db.clear()
-    return {"success": True, "message": "DB 초기화 완료"}
-
-
-# ── 로컬 실행 ──────────────────────────────────────────────
-
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8000))
-    print(f"\n[서버] 포트 {port}에서 시작 중...\n", file=sys.stderr)
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+    def clear(self) -> None:
+        with self.pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f"TRUNCATE TABLE {self.table_name}")
+                conn.commit()
+        print("✅ DB 테이블 초기화 완료")
