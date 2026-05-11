@@ -245,9 +245,13 @@ class TranscriptAnalysisTool(BaseTool):
 [내용]
 {extracted}
 
+분석 지침:
+- strategy_name: 이 영상에서 다루는 매매 기법의 '고유 명칭'이나 '구체적인 제목'을 추출하세요. (예: "3일선 반등 스윙 전략", "하락장 탈출 매매법")
+- 주의: "투자 전략", "매매 원칙" 같은 추상적이고 일반적인 명칭은 일절 금지합니다. 영상에서 강조하는 핵심 키워드를 포함해 구체적으로 지으세요.
+
 JSON만 출력:
 {{
-  "strategy_name": "주요 전략명",
+  "strategy_name": "구체적인 전략명",
   "sections": [
     {{
       "section_name": "섹션명",
@@ -258,6 +262,10 @@ JSON만 출력:
       "target_audience": ["초보 투자자"]
     }}
   ],
+  "keywords": ["키워드1", "키워드2"],
+  "confidence": 0.9
+}}
+""", max_tokens=3000)
   "keywords": ["키워드1", "키워드2"],
   "confidence": 0.9
 }}
