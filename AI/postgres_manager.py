@@ -121,14 +121,14 @@ class PostgresVectorManager:
                 with conn.cursor(row_factory=dict_row) as cur:
                     # 코사인 유사도: 1 - (embedding <=> query_embedding)
                     # <=> : cosine distance
-                    sql = f\"\"\"
+                    sql = f"""
                         SELECT id, content, metadata, 
                                1 - (embedding <=> %s) AS similarity
                         FROM {self.table_name}
                         WHERE 1 - (embedding <=> %s) >= %s
                         ORDER BY similarity DESC
                         LIMIT %s
-                    \"\"\"
+                    """
                     cur.execute(sql, (query_embedding, query_embedding, score_threshold, k))
                     rows = cur.fetchall()
 
@@ -158,7 +158,8 @@ class PostgresVectorManager:
         with self.pool.connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(f"SELECT COUNT(*) FROM {self.table_name}")
-                return cur.fetchone()[0]
+                result = cur.fetchone()
+                return result[0] if result else 0
 
     def get_stats(self) -> Dict:
         count = self.count_documents()
