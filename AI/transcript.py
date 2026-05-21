@@ -1,6 +1,7 @@
 import os
+from urllib.parse import urlparse
 from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api.proxies import GenericProxyConfig
+from youtube_transcript_api.proxies import GenericProxyConfig, WebshareProxyConfig
 from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound, VideoUnavailable
 from typing import List, Dict, Optional
 import traceback
@@ -10,12 +11,21 @@ def _make_api(use_proxy: bool) -> YouTubeTranscriptApi:
     """proxy 적용 또는 직접 연결 API 인스턴스 반환"""
     proxy_url = os.environ.get("YOUTUBE_PROXY")
     if use_proxy and proxy_url:
+        parsed = urlparse(proxy_url)
+        if parsed.hostname and "webshare.io" in parsed.hostname:
+            print(f"[Transcript] Webshare 프록시 사용: {parsed.username}@{parsed.hostname}:{parsed.port}")
+            return YouTubeTranscriptApi(
+                proxy_config=WebshareProxyConfig(
+                    proxy_username=parsed.username,
+                    proxy_password=parsed.password,
+                )
+            )
         print(f"[Transcript] 프록시 사용: {proxy_url.split('@')[-1]}")
         return YouTubeTranscriptApi(
             proxy_config=GenericProxyConfig(http_url=proxy_url, https_url=proxy_url)
         )
     if use_proxy and not proxy_url:
-        print("[Transcript] ⚠️  HTTPS_PROXY 미설정 → 직접 연결로 대체")
+        print("[Transcript] ⚠️  YOUTUBE_PROXY 미설정 → 직접 연결로 대체")
     return YouTubeTranscriptApi()
 
 
