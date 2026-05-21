@@ -12,7 +12,7 @@ def _make_api(use_proxy: bool) -> YouTubeTranscriptApi:
     if use_proxy and proxy_url:
         print(f"[Transcript] 프록시 사용: {proxy_url.split('@')[-1]}")
         return YouTubeTranscriptApi(
-            proxy_config=GenericProxyConfig(https_url=proxy_url)
+            proxy_config=GenericProxyConfig(http_url=proxy_url, https_url=proxy_url)
         )
     if use_proxy and not proxy_url:
         print("[Transcript] ⚠️  HTTPS_PROXY 미설정 → 직접 연결로 대체")
