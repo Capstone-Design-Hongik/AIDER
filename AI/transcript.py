@@ -30,6 +30,8 @@ class TranscriptManager:
                 return url.split("v=")[1].split("&")[0]
             elif "youtu.be/" in url:
                 return url.split("youtu.be/")[1].split("?")[0]
+            elif "youtube.com/shorts/" in url:
+                return url.split("/shorts/")[1].split("?")[0]
             else:
                 raise ValueError(f"Invalid YouTube URL: {url}")
         except Exception as e:
